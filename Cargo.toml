@@ -5,7 +5,7 @@ authors = ["ErisianArchitect <github.com/ErisianArchitect>"]
 license = "MIT"
 repository = "https://github.com/ErisianArchitect/bash-loadable"
 documentation = "https://docs.rs/bash-loadable"
-version = "0.1.0-indev"
+version = "0.1.1-indev"
 edition = "2024"
 
 [dependencies]
