@@ -1,0 +1,12 @@
+[package]
+name = "bash-loadable"
+description = "Simple library for making Bash loadable builtins."
+authors = ["ErisianArchitect <github.com/ErisianArchitect>"]
+license = "MIT"
+repository = "https://github.com/ErisianArchitect/bash-loadable"
+documentation = "https://docs.rs/bash-loadable"
+version = "0.1.0-indev"
+edition = "2024"
+
+[dependencies]
+paste = "1.0.15"
