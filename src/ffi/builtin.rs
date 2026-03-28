@@ -9,6 +9,28 @@ use super::word::{
 
 pub type BuiltinFunc = extern "C" fn(WordListRef) -> c_int;
 
+pub struct BuiltinInfo {
+    pub name: *const c_char,
+    pub function: BuiltinFunc,
+    pub short_doc: *const c_char,
+    pub long_doc: *const *const c_char,
+}
+
+impl BuiltinInfo {
+    #[must_use]
+    #[inline]
+    pub const fn build(self) -> Builtin {
+        Builtin {
+            name: self.name,
+            function: self.function,
+            flags: 1,
+            long_doc: self.long_doc,
+            short_doc: self.short_doc,
+            handle: core::ptr::null(),
+        }
+    }
+}
+
 #[repr(C)]
 pub struct Builtin {
     pub name: *const c_char,

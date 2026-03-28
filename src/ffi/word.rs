@@ -1,5 +1,9 @@
-use std::{ffi::{CStr, c_char, c_int}, mem::transmute, ptr::NonNull};
-//
+use std::{ffi::{CStr, c_char, c_int}, marker::PhantomData, mem::transmute, ptr::NonNull};
+use crate::{
+    ffi::external::{self, ffi::{
+        dispose_word, dispose_words, make_bare_word, make_word, make_word_flags, make_word_list
+    }}, util::{self, ffi::to_cstr}
+};
 use paste::paste;
 
 // /* Possible values for the `flags' field of a WORD_DESC. */
@@ -288,43 +292,95 @@ define_word_flags!(
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct FFIWord {
+pub struct FFIWord<'a> {
     pub word: *const c_char,
     pub flags: FFIWordFlags,
+    _phantom: PhantomData<&'a CStr>,
 }
 
-impl FFIWord {
-    pub const EMTPY: Self = Self { word: c"".as_ptr(), flags: FFIWordFlags::NONE };
+impl<'a> FFIWord<'a> {
+    pub const EMTPY: FFIWord<'static> = FFIWord::new(c"".as_ptr(), FFIWordFlags::NONE);
+
+    #[must_use]
+    #[inline(always)]
+    pub const fn new(word: *const c_char, flags: FFIWordFlags) -> Self {
+        Self {
+            word,
+            flags,
+            _phantom: PhantomData,
+        }
+    }
 }
+
+// #[repr(transparent)]
+// #[derive(Clone, Copy)]
+// pub struct WordRef(Option<NonNull<FFIWord>>);
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordRef(Option<NonNull<FFIWord>>);
+pub struct WordRef<'a> {
+    word: Option<&'a FFIWord<'a>>,
+}
 
-impl WordRef {
+impl<'a> WordRef<'a> {
     #[must_use]
     #[inline(always)]
-    pub const fn get(&self) -> Option<&FFIWord> {
-        unsafe { transmute(self.0) }
+    pub const fn new(word: Option<&'a FFIWord<'a>>) -> Self {
+        Self {
+            word,
+        }
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub const fn get(&self) -> Option<&'a FFIWord<'a>> {
+        self.word
     }
 
     #[must_use]
     #[inline]
-    pub fn to_str(&self) -> Option<&str> {
+    pub fn to_str(&self) -> Option<&'a str> {
         if let Some(word) = self.get() {
             if word.word.is_null() {
                 return None;
             }
             let cstr = unsafe { CStr::from_ptr(word.word) };
             let len = cstr.count_bytes();
-            Some(unsafe { transmute(std::slice::from_raw_parts(word.word.cast::<u8>(), len)) })
+            Some(unsafe { transmute(std::slice::from_raw_parts(word.word, len)) })
         } else {
             None
         }
     }
+
+    #[must_use]
+    #[inline]
+    pub fn to_pair(&self) -> Option<(&'a str, FFIWordFlags)> {
+        if let Some(word) = self.get() {
+            if word.word.is_null() {
+                return None;
+            }
+            let cstr = unsafe { CStr::from_ptr(word.word) };
+            let len = cstr.count_bytes();
+            let s: &'a str = unsafe { transmute(core::slice::from_raw_parts(word.word.cast::<u8>(), len)) };
+            Some((s, word.flags))
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn copy<'b>(self) -> WordRef<'b> {
+        unsafe { external::ffi::copy_word(self) }
+    }
+
+    #[inline(always)]
+    pub fn dispose(self) {
+        unsafe { external::ffi::dispose_word(self); }
+    }
 }
 
-impl std::fmt::Display for WordRef {
+impl<'a> std::fmt::Display for WordRef<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(s) = self.to_str() {
             write!(f, "{s}")
@@ -336,51 +392,174 @@ impl std::fmt::Display for WordRef {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct FFIWordList {
-    pub next: WordListRef,
-    pub word: WordRef,
+pub struct FFIWordList<'a> {
+    pub next: WordListRef<'a>,
+    pub word: WordRef<'a>,
 }
 
-impl FFIWordList {
-    const NULL: Self = Self { next: WordListRef(None), word: WordRef(None) };
+impl<'a> FFIWordList<'a> {
+    pub const NULL: FFIWordList<'static> = FFIWordList { next: WordListRef(None), word: WordRef::new(None) };
 
     #[must_use]
     #[inline]
-    pub const fn next(&self) -> Option<&FFIWordList> {
+    pub const fn next(&self) -> Option<&'a FFIWordList<'a>> {
         self.next.get()
     }
 
     #[must_use]
     #[inline]
-    pub const fn word(&self) -> Option<&FFIWord> {
+    pub const fn word(&self) -> Option<&'a FFIWord<'a>> {
         self.word.get()
     }
 
     #[must_use]
     #[inline]
-    pub fn word_str(&self) -> Option<&str> {
+    pub fn word_str(&self) -> Option<&'a str> {
         self.word.to_str()
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WordKind<'a> {
+    Bare(&'a str),
+    Bash(&'a str),
+}
+
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordListRef(Option<NonNull<FFIWordList>>);
+pub struct WordListRef<'a>(Option<NonNull<FFIWordList<'a>>>);
 
-impl WordListRef {
+impl<'a> WordListRef<'a> {
+    pub const EMPTY: Self = Self(None);
     #[must_use]
     #[inline(always)]
-    pub const fn get(&self) -> Option<&FFIWordList> {
+    pub const fn get(&self) -> Option<&'a FFIWordList<'a>> {
         unsafe { transmute(self.0) }
     }
 
     #[must_use]
-    #[inline]
-    pub const fn as_ref(&self) -> &FFIWordList {
-        if let Some(inner) = self.get() {
-            inner
-        } else {
-            &FFIWordList::NULL
+    #[inline(always)]
+    pub const fn get_mut(&mut self) -> Option<&'a mut FFIWordList<'a>> {
+        unsafe { transmute(self.0) }
+    }
+
+    #[must_use]
+    pub fn new(words: &[WordKind]) -> Self {
+        let mut tail = WordListRef(None);
+        for &word in words.into_iter().rev() {
+            match word {
+                WordKind::Bare(word) => tail.prepend_bare_word(word),
+                WordKind::Bash(word) => tail.prepend_word(word),
+            }
         }
+        tail
+    }
+
+    #[must_use]
+    pub fn new_bash(words: &[&str]) -> Self {
+        let mut tail = WordListRef(None);
+        for &word in words.into_iter().rev() {
+            tail.prepend_word(word);
+        }
+        tail
+    }
+
+    #[must_use]
+    pub fn new_bare(bare_words: &[&str]) -> Self {
+        let mut tail = WordListRef(None);
+        for &word in bare_words.into_iter().rev() {
+            tail.prepend_bare_word(word);
+        }
+        tail
+    }
+
+    #[inline(always)]
+    fn internal_prepend(&mut self, word_kind: WordKind<'_>) {
+        let ffi_word = match word_kind {
+            WordKind::Bare(word) => {
+                let word_cstr = to_cstr(word);
+                unsafe { external::ffi::make_bare_word(word_cstr.as_ptr()) }
+            },
+            WordKind::Bash(word) => {
+                let word_cstr = to_cstr(word);
+                unsafe { external::ffi::make_word(word_cstr.as_ptr()) }
+            },
+        };
+        *self = unsafe { external::ffi::make_word_list(ffi_word, *self) };
+    }
+
+    pub fn prepend(&mut self, word_kind: WordKind<'_>) {
+        self.internal_prepend(word_kind);
+    }
+
+    #[inline(always)]
+    pub fn prepend_bare_word(&mut self, word: &str) {
+        self.internal_prepend(WordKind::Bare(word))
+    }
+
+    #[inline(always)]
+    pub fn prepend_word(&mut self, word: &str) {
+        self.internal_prepend(WordKind::Bash(word))
+    }
+
+    fn internal_append(&mut self, word_kind: WordKind<'_>) {
+        let ffi_word = match word_kind {
+            WordKind::Bare(word) => {
+                let word_cstr = to_cstr(word);
+                unsafe { external::ffi::make_bare_word(word_cstr.as_ptr()) }
+            },
+            WordKind::Bash(word) => {
+                let word_cstr = to_cstr(word);
+                unsafe { external::ffi::make_word(word_cstr.as_ptr()) }
+            },
+        };
+        let next = unsafe { external::ffi::make_word_list(ffi_word, WordListRef::EMPTY) };
+        match self.0 {
+            Some(mut inner) => {
+                let inner_mut = unsafe { inner.as_mut() };
+                inner_mut.next = next;
+            }
+            None => *self = next,
+        }
+    }
+
+    pub fn append(&mut self, word_kind: WordKind<'_>) {
+        self.internal_append(word_kind);
+    }
+
+    #[inline(always)]
+    pub fn append_bare_word(&mut self, word: &str) {
+        self.internal_append(WordKind::Bare(word));
+    }
+
+    #[inline(always)]
+    pub fn append_word(&mut self, word: &str) {
+        self.internal_append(WordKind::Bash(word));
+    }
+
+    pub fn remember(self, destructive: bool) {
+        let destructive = util::ffi::cbool(destructive);
+        unsafe { external::ffi::remember_args(self, destructive); }
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn copy<'b>(self) -> WordListRef<'b> {
+        unsafe { external::ffi::copy_word_list(self) }
+    }
+
+    #[inline(always)]
+    pub fn dispose(self) {
+        unsafe { external::ffi::dispose_words(self); }
+    }
+}
+
+impl<'a> Iterator for WordListRef<'a> {
+    type Item = (&'a str, FFIWordFlags);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.get()?;
+        *self = WordListRef(unsafe { transmute(current.next()) });
+        current.word.to_pair()
     }
 }
