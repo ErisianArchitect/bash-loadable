@@ -3,11 +3,23 @@ use core::ffi::{
     c_char,
 };
 
+mod force_zero {
+    #[repr(transparent)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct Zero(usize);
+
+    impl Zero {
+        pub const ZERO: Self = Self(0);
+    }
+}
+
+use force_zero::Zero;
+
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 pub struct LongDoc<const PARAGRAPHS: usize> {
     paragraphs: [*const c_char; PARAGRAPHS],
-    null_end: usize,
+    null_end: Zero,
 }
 
 impl<const PARAGRAPHS: usize> LongDoc<PARAGRAPHS> {
@@ -16,7 +28,7 @@ impl<const PARAGRAPHS: usize> LongDoc<PARAGRAPHS> {
     pub const fn new(paragraphs: [*const c_char; PARAGRAPHS]) -> Self {
         Self {
             paragraphs,
-            null_end: 0,
+            null_end: Zero::ZERO,
         }
     }
 

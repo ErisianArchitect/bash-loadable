@@ -91,7 +91,7 @@ impl<'a> ShellVar<'a> {
     pub fn value(&self) -> &str {
         from_cstr(unsafe {
             external::ffi::get_variable_value(*self)
-        })
+        }).unwrap_or("")
     }
 
     #[inline(always)]

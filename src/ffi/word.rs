@@ -1,309 +1,122 @@
 use std::{ffi::{CStr, c_char, c_int}, marker::PhantomData, mem::transmute, ptr::NonNull};
 use crate::{
+    macros::{
+        cenum,
+    },
     ffi::external::{self, ffi::{
         dispose_word, dispose_words, make_bare_word, make_word, make_word_flags, make_word_list
     }}, util::{self, ffi::to_cstr}
 };
-use paste::paste;
 
-// /* Possible values for the `flags' field of a WORD_DESC. */
-// #define W_HASDOLLAR	(1 << 0)	/* Dollar sign present. */
-// #define W_QUOTED	(1 << 1)	/* Some form of quote character is present. */
-// #define W_ASSIGNMENT	(1 << 2)	/* This word is a variable assignment. */
-// #define W_SPLITSPACE	(1 << 3)	/* Split this word on " " regardless of IFS */
-// #define W_NOSPLIT	(1 << 4)	/* Do not perform word splitting on this word because ifs is empty string. */
-// #define W_NOGLOB	(1 << 5)	/* Do not perform globbing on this word. */
-// #define W_NOSPLIT2	(1 << 6)	/* Don't split word except for $@ expansion (using spaces) because context does not allow it. */
-// #define W_TILDEEXP	(1 << 7)	/* Tilde expand this assignment word */
-// #define W_DOLLARAT	(1 << 8)	/* UNUSED - $@ and its special handling */
-// #define W_ARRAYREF	(1 << 9)	/* word is a valid array reference */
-// #define W_NOCOMSUB	(1 << 10)	/* Don't perform command substitution on this word */
-// #define W_ASSIGNRHS	(1 << 11)	/* Word is rhs of an assignment statement */
-// #define W_NOTILDE	(1 << 12)	/* Don't perform tilde expansion on this word */
-// #define W_NOASSNTILDE	(1 << 13)	/* don't do tilde expansion like an assignment statement */
-// #define W_EXPANDRHS	(1 << 14)	/* Expanding word in ${paramOPword} */
-// #define W_COMPASSIGN	(1 << 15)	/* Compound assignment */
-// #define W_ASSNBLTIN	(1 << 16)	/* word is a builtin command that takes assignments */
-// #define W_ASSIGNARG	(1 << 17)	/* word is assignment argument to command */
-// #define W_HASQUOTEDNULL	(1 << 18)	/* word contains a quoted null character */
-// #define W_DQUOTE	(1 << 19)	/* UNUSED - word should be treated as if double-quoted */
-// #define W_NOPROCSUB	(1 << 20)	/* don't perform process substitution */
-// #define W_SAWQUOTEDNULL	(1 << 21)	/* word contained a quoted null that was removed */
-// #define W_ASSIGNASSOC	(1 << 22)	/* word looks like associative array assignment */
-// #define W_ASSIGNARRAY	(1 << 23)	/* word looks like a compound indexed array assignment */
-// #define W_ARRAYIND	(1 << 24)	/* word is an array index being expanded */
-// #define W_ASSNGLOBAL	(1 << 25)	/* word is a global assignment to declare (declare/typeset -g) */
-// #define W_NOBRACE	(1 << 26)	/* Don't perform brace expansion */
-// #define W_COMPLETE	(1 << 27)	/* word is being expanded for completion */
-// #define W_CHKLOCAL	(1 << 28)	/* check for local vars on assignment */
-// #define W_FORCELOCAL	(1 << 29)	/* force assignments to be to local variables, non-fatal on assignment errors */
-
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FFIWordFlags(c_int);
-
-impl FFIWordFlags {
-    pub const NONE: Self = Self(0);
-
-    #[must_use]
-    #[inline(always)]
-    pub const fn has_flags(self, flags: Self) -> bool {
-        self.0 & flags.0 == flags.0
+cenum!(
+    pub enum WordFlags {
+        /// Dollar sign present.
+        HAS_DOLLAR
+            has_dollar              = 1 << 0,
+        /// Some form of quoted character is present.
+        QUOTED
+            quoted                  = 1 << 1,
+        /// This word is a variable assignment.
+        ASSIGNMENT
+            assignment              = 1 << 2,
+        /// Split this word on " " regardless of IFS.
+        SPLIT_SPACE
+            split_space             = 1 << 3,
+        /// Do not perform word splitting on this word because IFS is empty string.
+        NO_SPLIT
+            no_split                = 1 << 4,
+        /// Do not perform globbing on this word.
+        NO_GLOB
+            no_glob                 = 1 << 5,
+        /// Don't split word except for $@ expansion (using spaces) because context does not allow it.
+        NO_SPLIT2
+            no_split2               = 1 << 6,
+        /// Tilde expand this assignment word.
+        TILDE_EXP
+            tilde_exp               = 1 << 7,
+        /// $@ and its special handling. (Unused)
+        DOLLAR_AT
+            dollar_at               = 1 << 8,
+        /// Word is a valid array reference.
+        ARRAY_REF
+            array_ref               = 1 << 9,
+        /// Don't perform command substitution on this word.
+        NO_COMMAND_SUBSTITUTION
+            no_command_substitution = 1 << 10,
+        /// Word is RHS of an assignment statement.
+        ASSIGN_RHS
+            assign_rhs              = 1 << 11,
+        /// Don't perform tilde expansion on this word.
+        NO_TILDE
+            no_tilde                = 1 << 12,
+        /// Don't do tilde expansion like an assignment statement.
+        NO_ASSIGN_TILDE
+            no_assign_tilde         = 1 << 13,
+        /// Expanding word in ${paramOPword}
+        EXPAND_RHS
+            expand_rhs              = 1 << 14,
+        /// Compound assignment. (no idea what that means, better look it up.) // TODO
+        COMPOUND_ASSIGNMENT
+            compound_assignment     = 1 << 15,
+        /// Word is a builtin command that takes assignments
+        ASSIGN_BUILTIN
+            assign_builtin          = 1 << 16,
+        /// Word is assignment argument to command.
+        ASSIGN_ARG
+            assign_arg              = 1 << 17,
+        /// Word contains a quoted null character.
+        HAS_QUOTED_NULL
+            has_quoted_null         = 1 << 18,
+        /// Word should be treated as if double-quoted. (Unused)
+        DOUBLE_QUOTE
+            double_quote            = 1 << 19,
+        /// Don't perform process substitution.
+        NO_PROCESS_SUBSTITUTION
+            no_process_substitution = 1 << 20,
+        /// Word contained a quoted null that was removed.
+        SAW_QUOTED_NULL
+            saw_quoted_null         = 1 << 21,
+        /// Word looks like associative array assignment.
+        ASSIGN_ASSOC
+            assign_assoc            = 1 << 22,
+        /// Word looks like a compound indexed array assignment.
+        ASSIGN_ARRAY
+            assign_array            = 1 << 23,
+        /// Word is an array index being expanded.
+        ARRAY_INDEX
+            array_index             = 1 << 24,
+        /// Word is a global assignment to declare
+        ASSIGN_GLOBAL
+            assign_global           = 1 << 25,
+        /// Don't perform brace expansion
+        NO_BRACE
+            no_brace                = 1 << 26,
+        /// Word is being expanded for completion.
+        COMPLETION
+            completion              = 1 << 27,
+        /// Check for local vars on assignment.
+        CHECK_LOCAL
+            check_local             = 1 << 28,
+        /// Force assignment to be local variables, non-fatal on assignment errors.]    
+        FORCE_LOCAL
+            force_local             = 1 << 29
     }
-
-    #[inline(always)]
-    pub const fn add_flags(&mut self, flags: Self) {
-        self.0 |= flags.0;
-    }
-
-    #[inline(always)]
-    pub const fn remove_flags(&mut self, flags: Self) {
-        self.0 &= !flags.0;
-    }
-
-    #[inline(always)]
-    pub const fn toggle_flags(&mut self, flags: Self) {
-        self.0 ^= flags.0;
-    }
-
-    #[must_use]
-    #[inline(always)]
-    pub const fn with_flags(mut self, flags: Self) -> Self {
-        self.add_flags(flags);
-        self
-    }
-
-    #[must_use]
-    #[inline(always)]
-    pub const fn without_flags(mut self, flags: Self) -> Self {
-        self.remove_flags(flags);
-        self
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn count_ones(self) -> u32 {
-        self.0.count_ones()
-    }
-
-    #[must_use]
-    #[inline]
-    pub const fn pop_bottom_index(&mut self) -> Option<u32> {
-        if self.0 == 0 {
-            return None;
-        }
-        let mut mask = self.0.cast_unsigned();
-        let next_bit = mask.trailing_zeros();
-        mask ^= 1 << next_bit;
-        self.0 = mask.cast_signed();
-        Some(next_bit)
-    }
-
-    #[must_use]
-    #[inline]
-    pub fn get_flags(self) -> Box<[(Self, &'static str)]> {
-        self.collect()
-    }
-}
-
-impl Iterator for FFIWordFlags {
-    type Item = (FFIWordFlags, &'static str);
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.count_ones() as usize, Some(self.count_ones() as usize))
-    }
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let index = self.pop_bottom_index()?;
-        let index = index as usize;
-        Some((Self::ALL_FLAGS[index], Self::FLAG_NAMES[index]))
-    }
-}
-
-macro_rules! define_word_flags {
-    (
-        $(
-            #[$doc_meta:meta]
-            $const_name:ident $func_name:ident = $value:expr
-        ),*
-        $(,)
-    ?) => {
-        paste!{
-            impl FFIWordFlags {
-                pub const ALL: Self = {
-                    let mut builder = Self::NONE;
-                    $(
-                        builder.add_flags(Self::$const_name);
-                    )*
-                    builder
-                };
-                pub const ALL_FLAGS: &'static [Self] = &[
-                    $(
-                        Self::$const_name,
-                    )*
-                ];
-                pub const FLAG_NAMES: &'static [&'static str] = &[
-                    $(
-                        stringify!($func_name),
-                    )*
-                ];
-                $(
-                    #[$doc_meta]
-                    pub const $const_name: Self = Self($value);
-                    
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn [<get_ $func_name>](self) -> bool {
-                        self.has_flags(Self::$const_name)
-                    }
-
-                    #[inline(always)]
-                    pub const fn [<add_ $func_name>](&mut self) {
-                        self.add_flags(Self::$const_name);
-                    }
-
-                    #[inline(always)]
-                    pub const fn [<remove_ $func_name>](&mut self) {
-                        self.remove_flags(Self::$const_name);
-                    }
-
-                    #[inline]
-                    pub const fn [<set_ $func_name>](&mut self, on: bool) {
-                        if on {
-                            self.add_flags(Self::$const_name);
-                        } else {
-                            self.remove_flags(Self::$const_name);
-                        }
-                    }
-
-                    #[inline(always)]
-                    pub const fn [<toggle_ $func_name>](&mut self) {
-                        self.0 ^= Self::$const_name.0;
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn [<with_ $func_name>](self) -> Self {
-                        self.with_flags(Self::$const_name)
-                    }
-
-                    #[must_use]
-                    #[inline(always)]
-                    pub const fn [<without_ $func_name>](self) -> Self {
-                        self.without_flags(Self::$const_name)
-                    }
-                )*
-            }
-        }
-    };
-}
-
-define_word_flags!(
-    /// Dollar sign present.
-    HAS_DOLLAR
-        has_dollar              = 1 << 0,
-    /// Some form of quoted character is present.
-    QUOTED
-        quoted                  = 1 << 1,
-    /// This word is a variable assignment.
-    ASSIGNMENT
-        assignment              = 1 << 2,
-    /// Split this word on " " regardless of IFS.
-    SPLIT_SPACE
-        split_space             = 1 << 3,
-    /// Do not perform word splitting on this word because IFS is empty string.
-    NO_SPLIT
-        no_split                = 1 << 4,
-    /// Do not perform globbing on this word.
-    NO_GLOB
-        no_glob                 = 1 << 5,
-    /// Don't split word except for $@ expansion (using spaces) because context does not allow it.
-    NO_SPLIT2
-        no_split2               = 1 << 6,
-    /// Tilde expand this assignment word.
-    TILDE_EXP
-        tilde_exp               = 1 << 7,
-    /// $@ and its special handling. (Unused)
-    DOLLAR_AT
-        dollar_at               = 1 << 8,
-    /// Word is a valid array reference.
-    ARRAY_REF
-        array_ref               = 1 << 9,
-    /// Don't perform command substitution on this word.
-    NO_COMMAND_SUBSTITUTION
-        no_command_substitution = 1 << 10,
-    /// Word is RHS of an assignment statement.
-    ASSIGN_RHS
-        assign_rhs              = 1 << 11,
-    /// Don't perform tilde expansion on this word.
-    NO_TILDE
-        no_tilde                = 1 << 12,
-    /// Don't do tilde expansion like an assignment statement.
-    NO_ASSIGN_TILDE
-        no_assign_tilde         = 1 << 13,
-    /// Expanding word in ${paramOPword}
-    EXPAND_RHS
-        expand_rhs              = 1 << 14,
-    /// Compound assignment. (no idea what that means, better look it up.) // TODO
-    COMPOUND_ASSIGNMENT
-        compound_assignment     = 1 << 15,
-    /// Word is a builtin command that takes assignments
-    ASSIGN_BUILTIN
-        assign_builtin          = 1 << 16,
-    /// Word is assignment argument to command.
-    ASSIGN_ARG
-        assign_arg              = 1 << 17,
-    /// Word contains a quoted null character.
-    HAS_QUOTED_NULL
-        has_quoted_null         = 1 << 18,
-    /// Word should be treated as if double-quoted. (Unused)
-    DOUBLE_QUOTE
-        double_quote            = 1 << 19,
-    /// Don't perform process substitution.
-    NO_PROCESS_SUBSTITUTION
-        no_process_substitution = 1 << 20,
-    /// Word contained a quoted null that was removed.
-    SAW_QUOTED_NULL
-        saw_quoted_null         = 1 << 21,
-    /// Word looks like associative array assignment.
-    ASSIGN_ASSOC
-        assign_assoc            = 1 << 22,
-    /// Word looks like a compound indexed array assignment.
-    ASSIGN_ARRAY
-        assign_array            = 1 << 23,
-    /// Word is an array index being expanded.
-    ARRAY_INDEX
-        array_index             = 1 << 24,
-    /// Word is a global assignment to declare
-    ASSIGN_GLOBAL
-        assign_global           = 1 << 25,
-    /// Don't perform brace expansion
-    NO_BRACE
-        no_brace                = 1 << 26,
-    /// Word is being expanded for completion.
-    COMPLETION
-        completion              = 1 << 27,
-    /// Check for local vars on assignment.
-    CHECK_LOCAL
-        check_local             = 1 << 28,
-    /// Force assignment to be local variables, non-fatal on assignment errors.]    
-    FORCE_LOCAL
-        force_local             = 1 << 29
 );
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FFIWord<'a> {
     pub word: *const c_char,
-    pub flags: FFIWordFlags,
+    pub flags: WordFlags,
     _phantom: PhantomData<&'a CStr>,
 }
 
 impl<'a> FFIWord<'a> {
-    pub const EMTPY: FFIWord<'static> = FFIWord::new(c"".as_ptr(), FFIWordFlags::NONE);
+    pub const EMTPY: FFIWord<'static> = FFIWord::new(c"".as_ptr(), WordFlags::NONE);
 
     #[must_use]
     #[inline(always)]
-    pub const fn new(word: *const c_char, flags: FFIWordFlags) -> Self {
+    pub const fn new(word: *const c_char, flags: WordFlags) -> Self {
         Self {
             word,
             flags,
@@ -318,11 +131,11 @@ impl<'a> FFIWord<'a> {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordRef<'a> {
+pub struct Word<'a> {
     word: Option<&'a FFIWord<'a>>,
 }
 
-impl<'a> WordRef<'a> {
+impl<'a> Word<'a> {
     #[must_use]
     #[inline(always)]
     pub const fn new(word: Option<&'a FFIWord<'a>>) -> Self {
@@ -354,7 +167,7 @@ impl<'a> WordRef<'a> {
 
     #[must_use]
     #[inline]
-    pub fn to_pair(&self) -> Option<(&'a str, FFIWordFlags)> {
+    pub fn to_pair(&self) -> Option<(&'a str, WordFlags)> {
         if let Some(word) = self.get() {
             if word.word.is_null() {
                 return None;
@@ -370,7 +183,7 @@ impl<'a> WordRef<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub fn copy<'b>(self) -> WordRef<'b> {
+    pub fn copy<'b>(self) -> Word<'b> {
         unsafe { external::ffi::copy_word(self) }
     }
 
@@ -380,7 +193,7 @@ impl<'a> WordRef<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for WordRef<'a> {
+impl<'a> std::fmt::Display for Word<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(s) = self.to_str() {
             write!(f, "{s}")
@@ -393,17 +206,29 @@ impl<'a> std::fmt::Display for WordRef<'a> {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FFIWordList<'a> {
-    pub next: WordListRef<'a>,
-    pub word: WordRef<'a>,
+    pub next: WordList<'a>,
+    pub word: Word<'a>,
 }
 
 impl<'a> FFIWordList<'a> {
-    pub const NULL: FFIWordList<'static> = FFIWordList { next: WordListRef(None), word: WordRef::new(None) };
+    pub const NULL: FFIWordList<'static> = FFIWordList { next: WordList(None), word: Word::new(None) };
+
+    #[must_use]
+    #[inline]
+    pub const fn next_raw(&self) -> Option<NonNull<FFIWordList<'a>>> {
+        self.next.0
+    }
 
     #[must_use]
     #[inline]
     pub const fn next(&self) -> Option<&'a FFIWordList<'a>> {
         self.next.get()
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn next_mut(&mut self) -> Option<&'a mut FFIWordList<'a>> {
+        self.next.get_mut()
     }
 
     #[must_use]
@@ -427,9 +252,9 @@ pub enum WordKind<'a> {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordListRef<'a>(Option<NonNull<FFIWordList<'a>>>);
+pub struct WordList<'a>(Option<NonNull<FFIWordList<'a>>>);
 
-impl<'a> WordListRef<'a> {
+impl<'a> WordList<'a> {
     pub const EMPTY: Self = Self(None);
     #[must_use]
     #[inline(always)]
@@ -445,7 +270,7 @@ impl<'a> WordListRef<'a> {
 
     #[must_use]
     pub fn new(words: &[WordKind]) -> Self {
-        let mut tail = WordListRef(None);
+        let mut tail = WordList(None);
         for &word in words.into_iter().rev() {
             match word {
                 WordKind::Bare(word) => tail.prepend_bare_word(word),
@@ -457,7 +282,7 @@ impl<'a> WordListRef<'a> {
 
     #[must_use]
     pub fn new_bash(words: &[&str]) -> Self {
-        let mut tail = WordListRef(None);
+        let mut tail = WordList(None);
         for &word in words.into_iter().rev() {
             tail.prepend_word(word);
         }
@@ -466,7 +291,7 @@ impl<'a> WordListRef<'a> {
 
     #[must_use]
     pub fn new_bare(bare_words: &[&str]) -> Self {
-        let mut tail = WordListRef(None);
+        let mut tail = WordList(None);
         for &word in bare_words.into_iter().rev() {
             tail.prepend_bare_word(word);
         }
@@ -513,13 +338,20 @@ impl<'a> WordListRef<'a> {
                 unsafe { external::ffi::make_word(word_cstr.as_ptr()) }
             },
         };
-        let next = unsafe { external::ffi::make_word_list(ffi_word, WordListRef::EMPTY) };
-        match self.0 {
-            Some(mut inner) => {
-                let inner_mut = unsafe { inner.as_mut() };
-                inner_mut.next = next;
+        let next = unsafe { external::ffi::make_word_list(ffi_word, WordList::EMPTY) };
+        if let Some(mut tail) = self.0 {
+            loop {
+                let tail_ref = unsafe { tail.as_ref() };
+                if let Some(next_node) = tail_ref.next_raw() {
+                    tail = next_node;
+                } else {
+                    break;
+                }
             }
-            None => *self = next,
+            let tail_mut = unsafe { tail.as_mut() };
+            tail_mut.next = next;
+        } else {
+            *self = next;
         }
     }
 
@@ -538,13 +370,13 @@ impl<'a> WordListRef<'a> {
     }
 
     pub fn remember(self, destructive: bool) {
-        let destructive = util::ffi::cbool(destructive);
+        let destructive = util::ffi::CBool::from_bool(destructive);
         unsafe { external::ffi::remember_args(self, destructive); }
     }
 
     #[must_use]
     #[inline(always)]
-    pub fn copy<'b>(self) -> WordListRef<'b> {
+    pub fn copy<'b>(self) -> WordList<'b> {
         unsafe { external::ffi::copy_word_list(self) }
     }
 
@@ -554,12 +386,12 @@ impl<'a> WordListRef<'a> {
     }
 }
 
-impl<'a> Iterator for WordListRef<'a> {
-    type Item = (&'a str, FFIWordFlags);
+impl<'a> Iterator for WordList<'a> {
+    type Item = (&'a str, WordFlags);
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.get()?;
-        *self = WordListRef(unsafe { transmute(current.next()) });
+        *self = WordList(unsafe { transmute(current.next()) });
         current.word.to_pair()
     }
 }
