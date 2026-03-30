@@ -105,14 +105,13 @@ cenum!(
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct FFIWord<'a> {
+pub struct FFIWord {
     pub word: *const c_char,
     pub flags: WordFlags,
-    _phantom: PhantomData<&'a CStr>,
 }
 
-impl<'a> FFIWord<'a> {
-    pub const EMTPY: FFIWord<'static> = FFIWord::new(c"".as_ptr(), WordFlags::NONE);
+impl FFIWord {
+    pub const EMTPY: FFIWord = FFIWord::new(c"".as_ptr(), WordFlags::NONE);
 
     #[must_use]
     #[inline(always)]
@@ -120,7 +119,6 @@ impl<'a> FFIWord<'a> {
         Self {
             word,
             flags,
-            _phantom: PhantomData,
         }
     }
 }
@@ -131,14 +129,14 @@ impl<'a> FFIWord<'a> {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct Word<'a> {
-    word: Option<&'a FFIWord<'a>>,
+pub struct Word {
+    word: Option<NonNull<FFIWord>>,
 }
 
-impl<'a> Word<'a> {
+impl Word {
     #[must_use]
     #[inline(always)]
-    pub const fn new(word: Option<&'a FFIWord<'a>>) -> Self {
+    pub const fn new(word: Option<NonNull<FFIWord>>) -> Self {
         Self {
             word,
         }
@@ -146,13 +144,15 @@ impl<'a> Word<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub const fn get(&self) -> Option<&'a FFIWord<'a>> {
-        self.word
+    pub const fn get(&self) -> Option<&FFIWord> {
+        unsafe {
+            transmute(self.word)
+        }
     }
 
     #[must_use]
     #[inline]
-    pub fn to_str(&self) -> Option<&'a str> {
+    pub fn to_str(&self) -> Option<&str> {
         if let Some(word) = self.get() {
             if word.word.is_null() {
                 return None;
@@ -167,14 +167,14 @@ impl<'a> Word<'a> {
 
     #[must_use]
     #[inline]
-    pub fn to_pair(&self) -> Option<(&'a str, WordFlags)> {
+    pub fn to_pair(&self) -> Option<(&str, WordFlags)> {
         if let Some(word) = self.get() {
             if word.word.is_null() {
                 return None;
             }
             let cstr = unsafe { CStr::from_ptr(word.word) };
             let len = cstr.count_bytes();
-            let s: &'a str = unsafe { transmute(core::slice::from_raw_parts(word.word.cast::<u8>(), len)) };
+            let s: &str = unsafe { transmute(core::slice::from_raw_parts(word.word.cast::<u8>(), len)) };
             Some((s, word.flags))
         } else {
             None
@@ -183,7 +183,7 @@ impl<'a> Word<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub fn copy<'b>(self) -> Word<'b> {
+    pub fn copy(self) -> Word {
         unsafe { external::ffi::copy_word(self) }
     }
 
@@ -193,7 +193,7 @@ impl<'a> Word<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for Word<'a> {
+impl std::fmt::Display for Word {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(s) = self.to_str() {
             write!(f, "{s}")
@@ -205,41 +205,41 @@ impl<'a> std::fmt::Display for Word<'a> {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct FFIWordList<'a> {
-    pub next: WordList<'a>,
-    pub word: Word<'a>,
+pub struct FFIWordList {
+    pub next: WordList,
+    pub word: Word,
 }
 
-impl<'a> FFIWordList<'a> {
-    pub const NULL: FFIWordList<'static> = FFIWordList { next: WordList(None), word: Word::new(None) };
+impl FFIWordList {
+    pub const NULL: FFIWordList = FFIWordList { next: WordList(None), word: Word::new(None) };
 
     #[must_use]
     #[inline]
-    pub const fn next_raw(&self) -> Option<NonNull<FFIWordList<'a>>> {
+    pub const fn next_raw(&self) -> Option<NonNull<FFIWordList>> {
         self.next.0
     }
 
     #[must_use]
     #[inline]
-    pub const fn next(&self) -> Option<&'a FFIWordList<'a>> {
+    pub const fn next(&self) -> Option<&FFIWordList> {
         self.next.get()
     }
 
     #[must_use]
     #[inline]
-    pub const fn next_mut(&mut self) -> Option<&'a mut FFIWordList<'a>> {
+    pub const fn next_mut(&mut self) -> Option<&mut FFIWordList> {
         self.next.get_mut()
     }
 
     #[must_use]
     #[inline]
-    pub const fn word(&self) -> Option<&'a FFIWord<'a>> {
+    pub const fn word(&self) -> Option<&FFIWord> {
         self.word.get()
     }
 
     #[must_use]
     #[inline]
-    pub fn word_str(&self) -> Option<&'a str> {
+    pub fn word_str(&self) -> Option<&str> {
         self.word.to_str()
     }
 }
@@ -252,19 +252,19 @@ pub enum WordKind<'a> {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordList<'a>(Option<NonNull<FFIWordList<'a>>>);
+pub struct WordList(Option<NonNull<FFIWordList>>);
 
-impl<'a> WordList<'a> {
+impl WordList {
     pub const EMPTY: Self = Self(None);
     #[must_use]
     #[inline(always)]
-    pub const fn get(&self) -> Option<&'a FFIWordList<'a>> {
+    pub const fn get(&self) -> Option<&FFIWordList> {
         unsafe { transmute(self.0) }
     }
 
     #[must_use]
     #[inline(always)]
-    pub const fn get_mut(&mut self) -> Option<&'a mut FFIWordList<'a>> {
+    pub const fn get_mut(&mut self) -> Option<&mut FFIWordList> {
         unsafe { transmute(self.0) }
     }
 
@@ -376,7 +376,7 @@ impl<'a> WordList<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub fn copy<'b>(self) -> WordList<'b> {
+    pub fn copy(self) -> WordList {
         unsafe { external::ffi::copy_word_list(self) }
     }
 
@@ -384,14 +384,28 @@ impl<'a> WordList<'a> {
     pub fn dispose(self) {
         unsafe { external::ffi::dispose_words(self); }
     }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn iter(&self) -> WordListIter<'_> {
+        WordListIter {
+            list: *self,
+            _phantom: PhantomData,
+        }
+    }
 }
 
-impl<'a> Iterator for WordList<'a> {
+pub struct WordListIter<'a> {
+    list: WordList,
+    _phantom: PhantomData<&'a str>,
+}
+
+impl<'a> Iterator for WordListIter<'a> {
     type Item = (&'a str, WordFlags);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let current = self.get()?;
-        *self = WordList(unsafe { transmute(current.next()) });
+        let current = unsafe { self.list.0?.as_ref() };
+        self.list = WordList(current.next_raw());
         current.word.to_pair()
     }
 }

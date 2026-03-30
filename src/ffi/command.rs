@@ -4,9 +4,7 @@ use core::{
     },
 };
 use crate::{
-    macros::{
-        cenum,
-    },
+    ffi::word::Word, macros::cenum
 };
 
 #[repr(C)]
@@ -62,7 +60,18 @@ cenum!{
         STD_PATH            std_path            = 0x4000,
         /// Try to optimize this simple command.
         TRY_OPTIMIZING      try_optimizing      = 0x8000,
-    }// TODO: I think I didn't finish this.
+    }
+}
+
+#[repr(C)]
+pub struct Redirectee {
+    dest: c_int,
+    word: Word,
+}
+
+#[repr(C)]
+pub struct Redirect {
+
 }
 
 #[repr(C)]

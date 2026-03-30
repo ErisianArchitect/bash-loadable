@@ -35,42 +35,42 @@ pub mod ffi {
 
         // common.h
         pub fn remember_args(
-            words: WordList<'_>,
+            words: WordList,
             destructive: CBool,
         );
 
         // command.h
-        pub fn copy_word<'a, 'b>(
-            word: Word<'b>,
-        ) -> Word<'a>;
-        pub fn copy_word_list<'a, 'b>(
-            words: WordList<'b>,
-        ) -> WordList<'a>;
+        pub fn copy_word(
+            word: Word,
+        ) -> Word;
+        pub fn copy_word_list(
+            words: WordList,
+        ) -> WordList;
 
         // make_cmd.h
-        pub fn alloc_word_desc<'a>(
-        ) -> Word<'a>;
-        pub fn make_bare_word<'a>(
+        pub fn alloc_word_desc(
+        ) -> Word;
+        pub fn make_bare_word(
             word: *const c_char
-        ) -> Word<'a>;
-        pub fn make_word_flags<'a>(
-            word: Word<'a>,
+        ) -> Word;
+        pub fn make_word_flags(
+            word: Word,
             string: *const c_char,
-        ) -> Word<'a>;
-        pub fn make_word<'a>(
+        ) -> Word;
+        pub fn make_word(
             word: *const c_char,
-        ) -> Word<'a>;
-        pub fn make_word_list<'a>(
-            word: Word<'a>,
-            head: WordList<'a>,
-        ) -> WordList<'a>;
+        ) -> Word;
+        pub fn make_word_list(
+            word: Word,
+            head: WordList,
+        ) -> WordList;
     
         // dispose_cmd.h
         pub fn dispose_word(
-            word: Word<'_>,
+            word: Word,
         );
         pub fn dispose_words(
-            list: WordList<'_>,
+            list: WordList,
         );
     
         // Current working directory
@@ -343,32 +343,32 @@ pub mod ffi {
             array: Array<'_>,
             index: c_long,
         ) -> *const c_char;
-        pub fn array_to_wordlist<'a, 'b>(
-            array: Array<'a>,
-        ) -> WordList<'b>;
-        pub fn array_from_wordlist<'a, 'b>(
-            words: WordList<'a>,
-        ) -> Array<'b>;
-        pub fn array_keys_to_word_list<'a, 'b>(
-            array: Array<'a>,
-        ) -> WordList<'b>;
-        pub fn array_to_kvpair_list<'a, 'b>(
-            array: Array<'a>,
-        ) -> WordList<'b>;
-        pub fn array_assign_list<'a, 'b>(
-            array: Array<'a>,
-            words: WordList<'b>,
-        ) -> Array<'b>;
+        pub fn array_to_wordlist(
+            array: Array<'_>,
+        ) -> WordList;
+        pub fn array_from_wordlist<'a>(
+            words: WordList,
+        ) -> Array<'a>;
+        pub fn array_keys_to_word_list(
+            array: Array<'_>,
+        ) -> WordList;
+        pub fn array_to_kvpair_list(
+            array: Array<'_>,
+        ) -> WordList;
+        pub fn array_assign_list(
+            array: Array<'_>,
+            words: WordList,
+        ) -> Array<'_>;
         // TODO: Investigate memory management of return value.
         // pub fn array_to_argv(
         //     array: Array<'_>,
         //     count: &mut c_int,
         // ) -> BashOwned<*const c_char>;
-        pub fn array_from_argv<'a>(
-            array: Array<'a>,
+        pub fn array_from_argv(
+            array: Array<'_>,
             argv: *const *const c_char,
             count: c_int,
-        ) -> Array<'a>;
+        ) -> Array<'_>;
         pub fn array_to_kvpair(
             array: Array<'_>,
             quoted: CBool,
