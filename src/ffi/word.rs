@@ -11,95 +11,65 @@ use crate::{
 cenum!(
     pub enum WordFlags {
         /// Dollar sign present.
-        HAS_DOLLAR
-            has_dollar              = 1 << 0,
+        HAS_DOLLAR                = Self(1 << 0),
         /// Some form of quoted character is present.
-        QUOTED
-            quoted                  = 1 << 1,
+        QUOTED                    = Self(1 << 1),
         /// This word is a variable assignment.
-        ASSIGNMENT
-            assignment              = 1 << 2,
+        ASSIGNMENT                = Self(1 << 2),
         /// Split this word on " " regardless of IFS.
-        SPLIT_SPACE
-            split_space             = 1 << 3,
+        SPLIT_SPACE               = Self(1 << 3),
         /// Do not perform word splitting on this word because IFS is empty string.
-        NO_SPLIT
-            no_split                = 1 << 4,
+        NO_SPLIT                  = Self(1 << 4),
         /// Do not perform globbing on this word.
-        NO_GLOB
-            no_glob                 = 1 << 5,
+        NO_GLOB                   = Self(1 << 5),
         /// Don't split word except for $@ expansion (using spaces) because context does not allow it.
-        NO_SPLIT2
-            no_split2               = 1 << 6,
+        NO_SPLIT2                 = Self(1 << 6),
         /// Tilde expand this assignment word.
-        TILDE_EXP
-            tilde_exp               = 1 << 7,
+        TILDE_EXP                 = Self(1 << 7),
         /// $@ and its special handling. (Unused)
-        DOLLAR_AT
-            dollar_at               = 1 << 8,
+        DOLLAR_AT                 = Self(1 << 8),
         /// Word is a valid array reference.
-        ARRAY_REF
-            array_ref               = 1 << 9,
+        ARRAY_REF                 = Self(1 << 9),
         /// Don't perform command substitution on this word.
-        NO_COMMAND_SUBSTITUTION
-            no_command_substitution = 1 << 10,
+        NO_COMMAND_SUBSTITUTION   = Self(1 << 10),
         /// Word is RHS of an assignment statement.
-        ASSIGN_RHS
-            assign_rhs              = 1 << 11,
+        ASSIGN_RHS                = Self(1 << 11),
         /// Don't perform tilde expansion on this word.
-        NO_TILDE
-            no_tilde                = 1 << 12,
+        NO_TILDE                  = Self(1 << 12),
         /// Don't do tilde expansion like an assignment statement.
-        NO_ASSIGN_TILDE
-            no_assign_tilde         = 1 << 13,
+        NO_ASSIGN_TILDE           = Self(1 << 13),
         /// Expanding word in ${paramOPword}
-        EXPAND_RHS
-            expand_rhs              = 1 << 14,
+        EXPAND_RHS                = Self(1 << 14),
         /// Compound assignment. (no idea what that means, better look it up.) // TODO
-        COMPOUND_ASSIGNMENT
-            compound_assignment     = 1 << 15,
+        COMPOUND_ASSIGNMENT       = Self(1 << 15),
         /// Word is a builtin command that takes assignments
-        ASSIGN_BUILTIN
-            assign_builtin          = 1 << 16,
+        ASSIGN_BUILTIN            = Self(1 << 16),
         /// Word is assignment argument to command.
-        ASSIGN_ARG
-            assign_arg              = 1 << 17,
+        ASSIGN_ARG                = Self(1 << 17),
         /// Word contains a quoted null character.
-        HAS_QUOTED_NULL
-            has_quoted_null         = 1 << 18,
+        HAS_QUOTED_NULL           = Self(1 << 18),
         /// Word should be treated as if double-quoted. (Unused)
-        DOUBLE_QUOTE
-            double_quote            = 1 << 19,
+        DOUBLE_QUOTE              = Self(1 << 19),
         /// Don't perform process substitution.
-        NO_PROCESS_SUBSTITUTION
-            no_process_substitution = 1 << 20,
+        NO_PROCESS_SUBSTITUTION   = Self(1 << 20),
         /// Word contained a quoted null that was removed.
-        SAW_QUOTED_NULL
-            saw_quoted_null         = 1 << 21,
+        SAW_QUOTED_NULL           = Self(1 << 21),
         /// Word looks like associative array assignment.
-        ASSIGN_ASSOC
-            assign_assoc            = 1 << 22,
+        ASSIGN_ASSOC              = Self(1 << 22),
         /// Word looks like a compound indexed array assignment.
-        ASSIGN_ARRAY
-            assign_array            = 1 << 23,
+        ASSIGN_ARRAY              = Self(1 << 23),
         /// Word is an array index being expanded.
-        ARRAY_INDEX
-            array_index             = 1 << 24,
+        ARRAY_INDEX               = Self(1 << 24),
         /// Word is a global assignment to declare
-        ASSIGN_GLOBAL
-            assign_global           = 1 << 25,
+        ASSIGN_GLOBAL             = Self(1 << 25),
         /// Don't perform brace expansion
-        NO_BRACE
-            no_brace                = 1 << 26,
+        NO_BRACE                  = Self(1 << 26),
         /// Word is being expanded for completion.
-        COMPLETION
-            completion              = 1 << 27,
+        COMPLETION                = Self(1 << 27),
         /// Check for local vars on assignment.
-        CHECK_LOCAL
-            check_local             = 1 << 28,
+        CHECK_LOCAL               = Self(1 << 28),
         /// Force assignment to be local variables, non-fatal on assignment errors.]    
-        FORCE_LOCAL
-            force_local             = 1 << 29
+        FORCE_LOCAL               = Self(1 << 29),
     }
 );
 
@@ -248,6 +218,32 @@ impl FFIWordList {
 pub enum WordKind<'a> {
     Bare(&'a str),
     Bash(&'a str),
+}
+
+impl<'a> WordKind<'a> {
+    #[must_use]
+    #[inline]
+    pub const fn as_str(&self) -> &str {
+        match self {
+            WordKind::Bare(word) => word,
+            WordKind::Bash(word) => word,
+        }
+    }
+}
+
+impl<'a> std::ops::Deref for WordKind<'a> {
+    type Target = str;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl<'a> AsRef<str> for WordKind<'a> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 #[repr(transparent)]

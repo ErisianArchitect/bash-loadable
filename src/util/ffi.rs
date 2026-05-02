@@ -33,6 +33,8 @@ const _: () = {
 
 pub use CBool::{False, True};
 
+use crate::util::check::assert_same_size_align;
+
 impl CBool {
     pub const BOTH: [Self; 2] = [Self::False, Self::True];
     #[must_use]
@@ -45,6 +47,12 @@ impl CBool {
     #[inline(always)]
     pub const fn from_c_int(value: c_int) -> Self {
         Self::from_bool(value != 0)
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub const fn from_bash_status(status: BashStatus) -> Self {
+        Self::from_bool(status.is_success())
     }
 
     #[must_use]
@@ -64,17 +72,7 @@ pub enum BashStatus {
     Success,
     Failure(BashStatusFailure),
 }
-
-const _: () = {
-    ["BashStatus incorrect size"]
-        [size_of::<BashStatus>() - size_of::<c_int>()];
-    ["BashStatus incorrect align"]
-        [align_of::<BashStatus>() - align_of::<c_int>()];
-    ["BashStatusFailure incorrect size"]
-        [size_of::<BashStatusFailure>() - size_of::<c_int>()];
-    ["BashStatusFailure incorrect align"]
-        [align_of::<BashStatusFailure>() - align_of::<c_int>()];
-};
+const _: () = assert_same_size_align::<BashStatus, c_int>();
 
 impl BashStatus {
     pub const BOOL_ORDER: [Self; 2] = [Self::from_c_int(1), Self::Success];
@@ -87,9 +85,8 @@ impl BashStatus {
     #[must_use]
     #[inline(always)]
     pub const fn from_c_int(value: c_int) -> Self {
-        unsafe {
-            transmute(value)
-        }
+        const _SAFETY: () = assert_same_size_align::<BashStatus, c_int>();
+        unsafe { transmute(value) }
     }
 
     #[must_use]
@@ -107,9 +104,8 @@ impl BashStatus {
     #[must_use]
     #[inline(always)]
     pub const fn to_c_int(self) -> c_int {
-        unsafe {
-            transmute(self)
-        }
+        const _SAFETY: () = assert_same_size_align::<BashStatus, c_int>();
+        unsafe { transmute(self) }
     }
 }
 

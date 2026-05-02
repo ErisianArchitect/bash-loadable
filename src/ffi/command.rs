@@ -29,37 +29,37 @@ pub enum CommandType {
 cenum!{
     pub enum CommandFlags {
         /// User wants a subshell: ( command )
-        WANT_SUBSHELL       want_subshell       = 0x0001,
+        WANT_SUBSHELL     = 0x0001,
         /// Shell needs to force a subshell.
-        FORCE_SUBSHELL      force_subshell      = 0x0002,
+        FORCE_SUBSHELL    = 0x0002,
         /// Invert the exit value.
-        INVERT_RETURN       invert_return       = 0x0004,
+        INVERT_RETURN     = 0x0004,
         /// Ignore the exit value. For set -e.
-        IGNORE_RETURN       ignore_return       = 0x0008,
+        IGNORE_RETURN     = 0x0008,
         /// Ignore functions during command lookup.
-        NO_FUNCTIONS        no_functions        = 0x0010,
+        NO_FUNCTIONS      = 0x0010,
         /// Do not expand the command words.
-        INHIBIT_EXPANSION   inhibit_expansion   = 0x0020,
+        INHIBIT_EXPANSION = 0x0020,
         /// Don't fork; just call execve.
-        NO_FORK             no_fork             = 0x0040,
+        NO_FORK           = 0x0040,
         /// Time a pipeline.
-        TIME_PIPELINE       time_pipeline       = 0x0080,
+        TIME_PIPELINE     = 0x0080,
         /// time -p; use POSIX.2 time output spec.
-        TIME_POSIX          time_posix          = 0x0100,
+        TIME_POSIX        = 0x0100,
         /// command &
-        AMPERSAND           ampersand           = 0x0200,
+        AMPERSAND         = 0x0200,
         /// Async command needs implicit </dev/null
-        STDIN_REDIR         stdin_redir         = 0x0400,
+        STDIN_REDIR       = 0x0400,
         /// Command executed by `command` builtin.
-        COMMAND_BUILTIN     command_builtin     = 0x0800,
+        COMMAND_BUILTIN   = 0x0800,
         /// COPROC_SUBSHELL!!!
-        COPROC_SUBSHELL     coproc_subshell     = 0x1000,
+        COPROC_SUBSHELL   = 0x1000,
         /// Last pipe.
-        LAST_PIPE           last_pipe           = 0x2000,
+        LAST_PIPE         = 0x2000,
         /// Use standard path for command lookup.
-        STD_PATH            std_path            = 0x4000,
+        STD_PATH          = 0x4000,
         /// Try to optimize this simple command.
-        TRY_OPTIMIZING      try_optimizing      = 0x8000,
+        TRY_OPTIMIZING    = 0x8000,
     }
 }
 

@@ -7,13 +7,15 @@ pub mod ffi {
         c_int,
         c_long,
     };
+    use std::ptr::NonNull;
     use crate::{ffi::{
-        alias::Alias, array::{Array, ArrayElement, PFlags, ShiftElementFlags}, bash_owned::BashOwned, bash_str::BashStr, pattern::MatchFlags, var::ShellVar, word::{
+        alias::Alias, array::{Array, ArrayElement, ArrayElementMapFn, ArrayRef, FFIArray, FFIArrayElement, PFlags, ShiftElementFlags}, bash_owned::BashOwned, bash_str::BashStr, eval::EvalFlags, pattern::MatchFlags, strvec::{StrVec, StrVecRef}, var::ShellVar, word::{
             Word,
             WordList,
         }
     }, util::ffi::{BashStatus, CBool}};
-    pub type ArrayElementMapFn = extern "C" fn(ArrayElement<'_>, data: *const ());
+
+    // pub type ArrayElementMapFn<T> = extern "C" fn(ArrayElementRef<'_>, data: &mut T);
 
     unsafe extern "C" {
         // xmalloc.h
@@ -84,12 +86,12 @@ pub mod ffi {
         pub fn parse_and_execute(
             source: *const c_char,
             from_file: *const c_char,
-            flags: c_int,
+            flags: EvalFlags,
         ) -> BashStatus;
-        pub fn eval_string(
+        pub fn evalstring(
             eval: *const c_char,
             from_file: *const c_char,
-            flags: c_int,
+            flags: EvalFlags,
         ) -> BashStatus;
         pub fn parse_and_execute_cleanup(
             old_running_trap: c_int,
@@ -98,7 +100,7 @@ pub mod ffi {
         pub fn parse_string(
             source: *const c_char,
             from_file: *const c_char,
-            flags: c_int,
+            flags: EvalFlags,
             cmdp: *const *const c_void,
             endp: *const *const c_char,
         ) -> c_int;
@@ -120,23 +122,23 @@ pub mod ffi {
         // variables.h
         pub fn find_variable<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn find_variable_noref<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         
         pub fn find_global_variable<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn find_global_variable_noref<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn find_shell_variable<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn find_tempenv_variable<'a>(
             name: *const c_char,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
 
         pub fn get_variable_value(
             var: ShellVar<'_>,
@@ -152,33 +154,33 @@ pub mod ffi {
         pub fn make_local_variable<'a>(
             name: *const c_char,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
 
         pub fn bind_variable<'a>(
             name: *const c_char,
             value: *const c_char,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn bind_global_variable<'a>(
             name: *const c_char,
             value: *const c_char,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn bind_variable_value<'a>(
             var: ShellVar<'a>,
             value: *const c_char,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn bind_int_value<'a>(
             var: ShellVar<'a>,
             value: *const c_char,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
         pub fn bind_var_to_int<'a>(
             var: *const c_char,
             value: c_long,
             flags: c_int,
-        ) -> ShellVar<'a>;
+        ) -> Option<ShellVar<'a>>;
 
         pub fn unbind_variable(
             name: *const c_char,
@@ -196,6 +198,8 @@ pub mod ffi {
         pub fn dispose_variable(
             var: ShellVar<'_>,
         );
+
+        
 
         // alias.h
         // TODO: Owned Alias(?) and AliasRef<'_>
@@ -230,161 +234,184 @@ pub mod ffi {
         );
 
         // array.h
-        pub fn array_alloc(
-            array: Array<'_>,
-            n: c_long,
-        );
-        pub fn array_resize(
-            array: Array<'_>,
-            n: c_long,
-        );
-        pub fn array_expand(
-            array: Array<'_>,
-            n: c_long,
-        );
+        // pub fn array_alloc(
+        //     array: NonNull<FFIArray>,
+        //     n: c_long,
+        // );
+        // pub fn array_resize(
+        //     array: NonNull<FFIArray>,
+        //     n: c_long,
+        // );
+        // pub fn array_expand(
+        //     array: NonNull<FFIArray>,
+        //     n: c_long,
+        // );
+        // TODO: array_expand_index, array_expand_once
         // TODO: Check if this needs to be BashOwned
-        pub fn array_dispose_elements(
-            elements: *const ArrayElement<'_>,
-        );
-        pub fn array_create<'a>(
-        ) -> Array<'a>;
+        // pub fn array_dispose_elements(
+        //     elements: *const Option<NonNull<FFIArrayElement>>,
+        // );
+        pub fn array_create(
+        ) -> Array;
         pub fn array_flush(
-            array: Array<'_>
+            array: NonNull<FFIArray>,
         );
         pub fn array_dispose(
-            array: Array<'_>,
+            array: NonNull<FFIArray>,
         );
-        pub fn array_copy<'a, 'b>(
-            array: Array<'a>,
-        ) -> Array<'b>;
-        pub fn array_slice<'a, 'b>(
-            array: Array<'a>,
+        pub fn array_copy(
+            array: NonNull<FFIArray>,
+        ) -> Array;
+        // TODO: Does this need owned?? Probably not.
+        pub fn array_slice(
+            array: ArrayRef<'_>,
             start: c_long,
             end: c_long,
-        ) -> Array<'b>;
+        ) -> Array;
+        // TODO: array_value(???), array_variable_name(???), array_variable_part(???)
+        // TODO: Does this need owned??
         pub fn array_walk(
-            array: Array<'_>,
-            map: ArrayElementMapFn,
-            data: *const (),
+            array: ArrayRef<'_>,
+            map: ArrayElementMapFn<()>,
+            data: *mut (),
         );
+        // TODO: Here is where I left off (going down)
         // TODO: Check if this needs to be BashOwned
-        pub fn array_shift<'a>(
-            array: Array<'a>,
+        // TODO: Does this need owned??
+        pub fn array_shift(
+            array: Array,
             n: c_int,
             flags: ShiftElementFlags,
-        ) -> *const ArrayElement<'a>;
+        ) -> *const ArrayElement;
+        // TODO: Does this need owned??
         pub fn array_rshift(
-            array: Array<'_>,
+            array: Array,
             n: c_int,
             value: *const c_char,
         ) -> c_int;
-        pub fn array_unshift_element<'a>(
-            array: Array<'a>,
-        ) -> ArrayElement<'a>;
-        pub fn array_shift_element(
-            array: Array<'_>,
-            value: *const c_char,
-        ) -> c_int;
+        // TODO: Does this need owned??
+        pub fn array_unshift_element(
+            array: Array,
+        ) -> ArrayElement;
+        // pub fn array_shift_element(
+        //     array: Array,
+        //     value: *const c_char,
+        // ) -> c_int;
+        // TODO: Does this need owned??
         pub fn array_quote(
-            array: Array<'_>,
-        ) -> Array<'_>;
+            array: Array,
+        ) -> Array;
+        // TODO: Does this need owned??
         pub fn array_quote_escapes(
-            array: Array<'_>,
-        ) -> Array<'_>;
+            array: Array,
+        ) -> Array;
         pub fn array_dequote(
-            array: Array<'_>,
-        ) -> Array<'_>;
+            array: Array,
+        ) -> Array;
         pub fn array_dequote_escapes(
-            array: Array<'_>,
-        ) -> Array<'_>;
+            array: Array,
+        ) -> Array;
+        // TODO: Does this need owned??
         pub fn array_remove_quoted_nulls(
-            array: Array<'_>,
-        ) -> Array<'_>;
+            array: Array,
+        ) -> Array;
+        // TODO: Does this need owned??
         pub fn array_subrange(
-            array: Array<'_>,
+            array: Array,
             start: c_long,
             nelem: c_long,
             starsub: c_int,
             quoted: c_int,
             flags: PFlags,
         ) -> Option<BashStr>;
+        // TODO: Does this need owned??
         pub fn array_patsub(
-            array: Array<'_>,
+            array: Array,
             pattern: *const c_char,
             rep: *const c_char,
             flags: MatchFlags,
         ) -> Option<BashStr>;
+        // TODO: Does this need owned??
         pub fn array_modcase(
-            array: Array<'_>,
+            array: Array,
             pattern: *const c_char,
             modop: c_int,
             flags: MatchFlags,
         ) -> Option<BashStr>;
-        pub fn array_create_element<'a>(
+        pub fn array_create_element(
             index: c_long,
             value: *const c_char,
-        ) -> ArrayElement<'a>;
-        pub fn array_copy_element<'a, 'b>(
-            element: ArrayElement<'a>,
-        ) -> ArrayElement<'b>;
+        ) -> Option<ArrayElement>;
+        // pub fn array_copy_element(
+        //     element: NonNull<FFIArrayElement>,
+        // ) -> Option<ArrayElement>;
         pub fn array_dispose_element(
-            element: ArrayElement<'_>,
+            element: NonNull<FFIArrayElement>,
         );
         pub fn array_insert(
-            array: Array<'_>,
+            array: ArrayRef<'_>,
             index: c_long,
             value: *const c_char,
         ) -> c_int;
-        pub fn array_remove<'a>(
-            array: Array<'a>,
-        ) -> ArrayElement<'a>;
-        /// return value is owned by bash.
+        // TODO: Does this need owned??
+        pub fn array_remove(
+            array: Array,
+        ) -> ArrayElement;
+        // /// return value is owned by bash.
+        // TODO: Does this need owned??
         pub fn array_reference(
-            array: Array<'_>,
+            array: ArrayRef<'_>,
             index: c_long,
         ) -> *const c_char;
-        pub fn array_to_wordlist(
-            array: Array<'_>,
+        // TODO: Does this need owned??
+        pub fn array_to_word_list(
+            array: Array,
         ) -> WordList;
-        pub fn array_from_wordlist<'a>(
+        pub fn array_from_wordlist(
             words: WordList,
-        ) -> Array<'a>;
+        ) -> Array;
+        // TODO: Does this need owned??
         pub fn array_keys_to_word_list(
-            array: Array<'_>,
+            array: Array,
         ) -> WordList;
+        // TODO: Does this need owned??
         pub fn array_to_kvpair_list(
-            array: Array<'_>,
+            array: Array,
         ) -> WordList;
         pub fn array_assign_list(
-            array: Array<'_>,
+            array: Array,
             words: WordList,
-        ) -> Array<'_>;
-        // TODO: Investigate memory management of return value.
-        // pub fn array_to_argv(
-        //     array: Array<'_>,
-        //     count: &mut c_int,
-        // ) -> BashOwned<*const c_char>;
+        ) -> Array;
+        // // TODO: Investigate memory management of return value.
+        // TODO: Does this need owned??
+        pub fn array_to_argv(
+            array: ArrayRef<'_>,
+            count: &mut c_int,
+        ) -> BashOwned<*const c_char>;
         pub fn array_from_argv(
-            array: Array<'_>,
+            array: ArrayRef<'_>,
             argv: *const *const c_char,
             count: c_int,
-        ) -> Array<'_>;
+        ) -> Array;
+        // TODO: Does this need owned?? Check inputs/outputs
         pub fn array_to_kvpair(
-            array: Array<'_>,
+            array: Array,
             quoted: CBool,
         ) -> Option<BashStr>;
+        // TODO: Does this need owned??
         pub fn array_to_assign(
-            array: Array<'_>,
+            array: Array,
         ) -> Option<BashStr>;
+        // TODO: Does this need owned??
         pub fn array_to_string(
-            array: Array<'_>,
+            array: Array,
             sep: *const c_char,
             quoted: CBool,
         ) -> Option<BashStr>;
-        pub fn array_from_string<'a>(
-            s: *const c_char,
-            sep: *const c_char,
-        ) -> Array<'a>;
+        // pub fn array_from_string(
+        //     s: *const c_char,
+        //     sep: *const c_char,
+        // ) -> Array;
 
         // externs.h
 
@@ -394,5 +421,60 @@ pub mod ffi {
             validp: &mut c_int,
         ) -> c_long;
         
+        // externs.h :: strvec
+
+        pub fn strvec_create(
+            size: usize,
+        ) -> StrVec;
+        pub fn strvec_resize(
+            vec: StrVecRef<'_>,
+            new_size: usize,
+        ) -> StrVec;
+        // This is used internally by bash
+        // pub fn strvec_flush(
+        //     vec: StrVecRef<'_>,
+        // );
+        pub fn strvec_dispose(
+            // this is expected to invalidate the memory
+            // of the StrVec, and you would think it shoud
+            // be called on the StrVec itself, but `drop`
+            // doesn't take an owned value, it takes a
+            // mutable reference. Good thing this function
+            // requires an unsafe block!
+            vec: StrVecRef<'_>,
+        );
+        pub fn strvec_remove(
+            vec: StrVecRef<'_>,
+            // In bash, this parameter is `name`, but I believe that's an oddity.
+            // It's definitely removing the value within the array. I think these
+            // strvecs may be used to store names? I don't know.
+            // TODO: This should be a bash string of some sort. It should not be an owned variant.
+            value: *const c_char,
+        ) -> BashStatus;
+        pub fn strvec_len(
+            vec: StrVecRef<'_>,
+        ) -> usize;
+        pub fn strvec_search(
+            vec: StrVecRef<'_>,
+            value: *const c_char,
+        ) -> isize;
+        pub fn strvec_copy(
+            vec: StrVecRef<'_>,
+        ) -> StrVec;
+        // This is used internally by bash
+        // pub fn strvec_posixcmp(
+        //     lhs: StrVecRef<'_>,
+        //     rhs: StrVecRef<'_>,
+        // ) -> c_int;
+        // This is used internally by bash
+        // pub fn strvec_strcmp(
+        //     lhs: StrVecRef<'_>,
+        //     rhs: StrVecRef<'_>,
+        // ) -> c_int;
+        pub fn strvec_sort(
+            vec: StrVecRef<'_>,
+            posix: CBool,
+        );
+        // TODO: Continue after strvec_sort in externs.h when you redo word.rs
     }
 }

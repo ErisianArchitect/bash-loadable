@@ -6,25 +6,25 @@ use crate::{
     ffi::word::WordList, macros::cenum, util::ffi::from_cstr
 };
 
+// found in builtins.h, search for `#define BUILTIN_ENABLED`
 cenum!{
     pub enum BuiltinFlags {
         /// This builtin is enabled.
-        ENABLED         enabled         = 0x01,
+        ENABLED       = 0x01,
         /// This builtin has been deleted with enable -d
-        DELETED         deleted         = 0x02,
+        DELETED       = 0x02,
         /// This built8in is not dynamically loaded.
-        STATIC_BUILTIN  static_builtin  = 0x04,
+        STATIC_BUILTIN= 0x04,
         /// This is a Posix `special` builtin.
-        SPECIAL         special         = 0x08,
+        SPECIAL       = 0x08,
         /// This bultin takes assignment statements.
-        ASSIGNMENT      assignment      = 0x10,
+        ASSIGNMENT    = 0x10,
         /// This builtin is special in the Posix command search order.
-        POSIX           posix           = 0x20,
+        POSIX         = 0x20,
         /// This builtin creates local variables.
-        LOCALVAR        localvar        = 0x40,
+        LOCALVAR      = 0x40,
         /// This builtin takes array references as arguments.
-        ARRAYREF        arrayref        = 0x80,
-        
+        ARRAYREF      = 0x80,
     }
 }
 
