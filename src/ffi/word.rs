@@ -1,4 +1,4 @@
-use std::{ffi::{CStr, c_char, c_int}, marker::PhantomData, mem::transmute, ptr::NonNull};
+use std::{ffi::{CStr, c_char, c_int}, marker::PhantomData, mem::{ManuallyDrop, transmute}, ptr::NonNull};
 use crate::{
     macros::{
         cenum,
@@ -93,10 +93,6 @@ impl FFIWord {
     }
 }
 
-// #[repr(transparent)]
-// #[derive(Clone, Copy)]
-// pub struct WordRef(Option<NonNull<FFIWord>>);
-
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct Word {
@@ -110,6 +106,20 @@ impl Word {
         Self {
             word,
         }
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn new_bare(word: &str) -> Self {
+        let word_cstr = to_cstr(word);
+        unsafe { external::ffi::make_bare_word(word_cstr.as_ptr()) }
+    }
+
+    #[must_use]
+    #[inline(always)]
+    pub fn new_bash(word: &str) -> Self {
+        let word_cstr = to_cstr(word);
+        unsafe { external::ffi::make_word(word_cstr.as_ptr()) }
     }
 
     #[must_use]
@@ -218,32 +228,6 @@ impl FFIWordList {
 pub enum WordKind<'a> {
     Bare(&'a str),
     Bash(&'a str),
-}
-
-impl<'a> WordKind<'a> {
-    #[must_use]
-    #[inline]
-    pub const fn as_str(&self) -> &str {
-        match self {
-            WordKind::Bare(word) => word,
-            WordKind::Bash(word) => word,
-        }
-    }
-}
-
-impl<'a> std::ops::Deref for WordKind<'a> {
-    type Target = str;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl<'a> AsRef<str> for WordKind<'a> {
-    #[inline]
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
 }
 
 #[repr(transparent)]
@@ -388,6 +372,13 @@ impl WordList {
             list: *self,
             _phantom: PhantomData,
         }
+    }
+
+    #[must_use]
+    pub fn into_string_vec(&self) -> Vec<String> {
+        self.iter()
+            .map(|(word, _)| String::from(word))
+            .collect()
     }
 }
 

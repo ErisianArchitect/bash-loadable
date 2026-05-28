@@ -1,3 +1,4 @@
+
 [package]
 name = "bash-loadable"
 description = "Simple library for making Bash loadable builtins."
@@ -8,6 +9,27 @@ documentation = "https://docs.rs/bash-loadable"
 version = "0.1.1-indev"
 edition = "2024"
 
+[features]
+default = []
+macros = ["dep:bash-loadable-macros"]
+
+[workspace]
+members = ["./crates/bash-loadable-macros"]
+resolver = "3"
+
 [dependencies]
-libc = "0.2.183"
+bash-loadable-macros = { workspace = true, optional = true }
+
+libc.workspace = true
+lolevel.workspace = true
+paste.workspace = true
+noansi.workspace = true
+
+[workspace.dependencies]
+bash-loadable-macros = { path = "./crates/bash-loadable-macros" }
+
+noansi = "0.1.1"
+libc = "0.2.186"
+lolevel = "1.0.0-indev"
 paste = "1.0.15"
+fancy-regex = "0.18.0"

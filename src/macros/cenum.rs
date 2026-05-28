@@ -1,7 +1,7 @@
 
 
 /// ```rust, ignore
-/// cenum!{
+/// cenum! {
 ///     /// Documentation.
 ///     pub enum StructName {
 ///         /// Documentation.

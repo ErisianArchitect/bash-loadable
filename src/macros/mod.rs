@@ -8,3 +8,6 @@ pub use crate::{
     cstr, str_to_cstr,
     longdoc, strlines,
 };
+
+#[cfg(feature = "macros")]
+pub use bash_loadable_macros::builtin;

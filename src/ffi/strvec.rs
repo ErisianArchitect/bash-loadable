@@ -63,6 +63,12 @@ impl StrVec {
 
     #[inline(always)]
     pub fn dispose(self) {}
+
+    #[must_use]
+    #[inline]
+    pub fn inner(&self) -> StrVecRef<'_> {
+        self.vec
+    }
 }
 
 impl Clone for StrVec {

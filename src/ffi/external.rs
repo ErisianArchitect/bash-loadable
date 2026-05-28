@@ -7,9 +7,11 @@ pub mod ffi {
         c_int,
         c_long,
     };
-    use std::ptr::NonNull;
-    use crate::{ffi::{
-        alias::Alias, array::{Array, ArrayElement, ArrayElementMapFn, ArrayRef, FFIArray, FFIArrayElement, PFlags, ShiftElementFlags}, bash_owned::BashOwned, bash_str::BashStr, eval::EvalFlags, pattern::MatchFlags, strvec::{StrVec, StrVecRef}, var::ShellVar, word::{
+    use std::{ffi::c_uint, ptr::NonNull};
+    use libc::intptr_t;
+
+use crate::{ffi::{
+        alias::Alias, array::{Array, ArrayElement, ArrayElementMapFn, ArrayRef, FFIArray, FFIArrayElement, PFlags, ShiftElementFlags}, bash_owned::BashOwned, bash_str::{BashStr, BashStrRef}, eval::EvalFlags, fn_ptr::{CopyFn, FreeFn}, hash_table::{BucketRef, HashDataFreeFn, TableFlags, TableRef}, pattern::MatchFlags, strvec::{StrVec, StrVecRef}, var::{AssignFlags, ShellVarRef, VCFlags, VarContextRef}, word::{
             Word,
             WordList,
         }
@@ -55,12 +57,12 @@ pub mod ffi {
         pub fn make_bare_word(
             word: *const c_char
         ) -> Word;
-        pub fn make_word_flags(
-            word: Word,
-            string: *const c_char,
-        ) -> Word;
         pub fn make_word(
             word: *const c_char,
+        ) -> Word;
+        pub fn make_word_flags<'a>(
+            word: Word,
+            string: *const c_char,
         ) -> Word;
         pub fn make_word_list(
             word: Word,
@@ -122,65 +124,73 @@ pub mod ffi {
         // variables.h
         pub fn find_variable<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
         pub fn find_variable_noref<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
         
         pub fn find_global_variable<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
         pub fn find_global_variable_noref<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
         pub fn find_shell_variable<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
         pub fn find_tempenv_variable<'a>(
             name: *const c_char,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
 
         pub fn get_variable_value(
-            var: ShellVar<'_>,
+            var: ShellVarRef<'_>,
         ) -> *const c_char;
         pub fn get_string_value(
             name: *const c_char,
         ) -> *const c_char;
 
         pub fn copy_variable<'a, 'b>(
-            var: ShellVar<'a>,
-        ) -> ShellVar<'b>;
+            var: ShellVarRef<'a>,
+        ) -> ShellVarRef<'b>;
 
         pub fn make_local_variable<'a>(
             name: *const c_char,
             flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+        ) -> Option<ShellVarRef<'a>>;
 
         pub fn bind_variable<'a>(
             name: *const c_char,
             value: *const c_char,
-            flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+            flags: AssignFlags,
+        ) -> Option<ShellVarRef<'a>>;
         pub fn bind_global_variable<'a>(
             name: *const c_char,
             value: *const c_char,
-            flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+            flags: AssignFlags,
+        ) -> Option<ShellVarRef<'a>>;
         pub fn bind_variable_value<'a>(
-            var: ShellVar<'a>,
+            var: ShellVarRef<'a>,
             value: *const c_char,
-            flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+            flags: AssignFlags,
+        ) -> Option<ShellVarRef<'a>>;
         pub fn bind_int_value<'a>(
-            var: ShellVar<'a>,
+            var: ShellVarRef<'a>,
             value: *const c_char,
-            flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+            flags: AssignFlags,
+        ) -> Option<ShellVarRef<'a>>;
         pub fn bind_var_to_int<'a>(
             var: *const c_char,
             value: c_long,
+            flags: AssignFlags,
+        ) -> Option<ShellVarRef<'a>>;
+
+        pub fn assign_in_env(
+            word: Word,
+            // TODO: I'm not entirely sure what this
+            //|      value represents. It seems to be
+            //|      used as a boolean.
             flags: c_int,
-        ) -> Option<ShellVar<'a>>;
+        ) -> c_int;
 
         pub fn unbind_variable(
             name: *const c_char,
@@ -196,10 +206,35 @@ pub mod ffi {
         ) -> BashStatus;
 
         pub fn dispose_variable(
-            var: ShellVar<'_>,
+            var: ShellVarRef<'_>,
         );
 
-        
+        pub fn new_var_context<'a>(
+            s: BashStrRef<'_>,
+            flags: VCFlags,
+        ) -> VarContextRef<'a>;
+        pub fn dispose_var_context(
+            context: VarContextRef<'_>,
+        );
+        /// This takes ownership of `table`, but
+        /// does not take ownership of the string.
+        pub fn push_var_context(
+            s: BashStrRef<'_>,
+            flags: VCFlags,
+            table: Option<TableRef<'_>>,
+        ) -> VarContextRef<'static>;
+        pub fn pop_var_context();
+        pub fn push_scope(
+            flags: VCFlags,
+            table: Option<TableRef<'_>>,
+        ) -> VarContextRef<'static>;
+        /// is_special is an intptr_t type.
+        pub fn pop_scope(
+            is_special: isize,
+        );
+
+        pub fn push_dollar_vars();
+        pub fn pop_dollar_vars();
 
         // alias.h
         // TODO: Owned Alias(?) and AliasRef<'_>
@@ -355,7 +390,7 @@ pub mod ffi {
         ) -> c_int;
         // TODO: Does this need owned??
         pub fn array_remove(
-            array: Array,
+            array: ArrayRef<'_>,
         ) -> ArrayElement;
         // /// return value is owned by bash.
         // TODO: Does this need owned??
@@ -365,21 +400,21 @@ pub mod ffi {
         ) -> *const c_char;
         // TODO: Does this need owned??
         pub fn array_to_word_list(
-            array: Array,
+            array: ArrayRef<'_>,
         ) -> WordList;
         pub fn array_from_wordlist(
             words: WordList,
         ) -> Array;
         // TODO: Does this need owned??
         pub fn array_keys_to_word_list(
-            array: Array,
+            array: ArrayRef<'_>,
         ) -> WordList;
         // TODO: Does this need owned??
         pub fn array_to_kvpair_list(
-            array: Array,
+            array: ArrayRef<'_>,
         ) -> WordList;
         pub fn array_assign_list(
-            array: Array,
+            array: ArrayRef<'_>,
             words: WordList,
         ) -> Array;
         // // TODO: Investigate memory management of return value.
@@ -395,16 +430,16 @@ pub mod ffi {
         ) -> Array;
         // TODO: Does this need owned?? Check inputs/outputs
         pub fn array_to_kvpair(
-            array: Array,
+            array: ArrayRef<'_>,
             quoted: CBool,
         ) -> Option<BashStr>;
         // TODO: Does this need owned??
         pub fn array_to_assign(
-            array: Array,
+            array: ArrayRef<'_>,
         ) -> Option<BashStr>;
         // TODO: Does this need owned??
         pub fn array_to_string(
-            array: Array,
+            array: ArrayRef<'_>,
             sep: *const c_char,
             quoted: CBool,
         ) -> Option<BashStr>;
@@ -476,5 +511,50 @@ pub mod ffi {
             posix: CBool,
         );
         // TODO: Continue after strvec_sort in externs.h when you redo word.rs
+
+        // hashlib.h
+        pub fn hash_create<'a>(
+            buckets: c_int,
+        ) -> TableRef<'a>;
+        pub fn hash_copy<'a>(
+            table: TableRef<'a>,
+            copy_fn: Option<CopyFn>,
+        ) -> TableRef<'a>;
+        pub fn hash_flush(
+            table: TableRef<'_>,
+            data_free: Option<HashDataFreeFn>,
+        );
+        pub fn hash_dispose(
+            table: TableRef<'_>,
+        );
+
+        pub fn hash_bucket(
+            key: BashStrRef<'_>,
+            table: TableRef<'_>,
+            flags: TableFlags,
+        ) -> c_int;
+        pub fn hash_size(
+            table: TableRef<'_>,
+        ) -> c_int;
+
+        pub fn hash_search<'a>(
+            key: BashStrRef<'_>,
+            table: TableRef<'a>,
+            flags: TableFlags,
+        ) -> Option<BucketRef<'a>>;
+        pub fn hash_insert<'a>(
+            key: BashStrRef<'_>,
+            table: TableRef<'a>,
+            flags: TableFlags,
+        ) -> BucketRef<'a>;
+        pub fn hash_remove<'a>(
+            key: BashStrRef<'_>,
+            table: TableRef<'a>,
+            flags: TableFlags,
+        ) -> Option<BucketRef<'a>>;
+
+        pub fn hash_string<'a>(
+            s: BashStrRef<'a>,
+        ) -> c_uint;
     }
 }

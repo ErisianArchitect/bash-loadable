@@ -8,7 +8,7 @@ use std::num::NonZeroI16;
 #[cfg(not(any(target_arch = "avr", target_arch = "msp430")))]
 use std::num::NonZeroI32;
 use std::{
-    borrow::Cow, ffi::CString, marker::PhantomData, mem::transmute, ptr::NonNull, str::FromStr
+    borrow::Cow, ffi::CString, marker::PhantomData, mem::transmute, num::NonZeroI16, ptr::NonNull, str::FromStr
 };
 
 // RE-EXPORTS
@@ -75,7 +75,8 @@ pub enum BashStatus {
 const _: () = assert_same_size_align::<BashStatus, c_int>();
 
 impl BashStatus {
-    pub const BOOL_ORDER: [Self; 2] = [Self::from_c_int(1), Self::Success];
+    pub const FAILURE: Self = Self::from_c_int(1);
+    pub const BOOL_ORDER: [Self; 2] = [Self::FAILURE, Self::Success];
     #[must_use]
     #[inline(always)]
     pub const fn from_bool(success: bool) -> Self {
@@ -106,6 +107,78 @@ impl BashStatus {
     pub const fn to_c_int(self) -> c_int {
         const _SAFETY: () = assert_same_size_align::<BashStatus, c_int>();
         unsafe { transmute(self) }
+    }
+}
+
+pub trait BashStatusResult: Sized + 'static {
+    fn eprintln_then_into_status(self) -> BashStatus {
+        BashStatus::Success
+    }
+}
+
+pub trait BashStatusError: Sized + 'static {
+    fn eprintln(&self) {}
+    
+    fn into_status(self) -> BashStatus {
+        BashStatus::FAILURE
+    }
+}
+
+impl BashStatusError for BashStatus {
+    fn eprintln(&self) {}
+
+    fn into_status(self) -> BashStatus {
+        self
+    }
+}
+
+impl BashStatusError for () {}
+impl BashStatusError for String {
+    fn eprintln(&self) {
+        eprintln!("{self}");
+    }
+}
+
+impl BashStatusError for &'static str {
+    fn eprintln(&self) {
+        eprintln!("{self}");
+    }
+}
+
+impl BashStatusError for c_int {
+    fn into_status(self) -> BashStatus {
+        BashStatus::from_c_int(self)
+    }
+}
+
+impl BashStatusResult for BashStatus {
+    fn eprintln_then_into_status(self) -> BashStatus {
+        self
+    }
+}
+
+impl BashStatusResult for () {}
+impl BashStatusResult for c_int {
+    fn eprintln_then_into_status(self) -> BashStatus {
+        BashStatus::from_c_int(self)
+    }
+}
+
+impl BashStatusResult for bool {
+    fn eprintln_then_into_status(self) -> BashStatus {
+        BashStatus::from_bool(self)
+    }
+}
+
+impl<E: BashStatusError> BashStatusResult for Result<(), E> {
+    fn eprintln_then_into_status(self) -> BashStatus {
+        match self {
+            Ok(_) => BashStatus::Success,
+            Err(err) => {
+                err.eprintln();
+                err.into_status()
+            },
+        }
     }
 }
 

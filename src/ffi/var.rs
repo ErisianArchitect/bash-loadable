@@ -5,7 +5,7 @@ use core::ffi::{
 };
 use std::{marker::PhantomData, mem::{ManuallyDrop, transmute}, ptr::NonNull};
 
-use crate::{cenum, ffi::{array::ArrayRef, bash_str::BashStrRef, external}, util::ffi::{from_cstr, to_cstr}};
+use crate::{cenum, ffi::{array::ArrayRef, bash_str::BashStrRef, external, hash_table::TableRef}, util::ffi::{from_cstr, to_cstr}};
 
 pub type ShellVarValueFn = extern "C" fn(*const FFIShellVar);
 pub type ShellVarAssignFn = extern "C" fn(*mut FFIShellVar, value: *const c_char, index: c_long, key: *const c_char) -> *const FFIShellVar;
@@ -44,6 +44,26 @@ cenum! {
     }
 }
 
+cenum! {
+    pub enum AssignFlags {
+        APPEND          = 0x0001,
+        MAKE_LOCAL      = 0x0002,
+        MAKE_ASSOC      = 0x0004,
+        MAKE_GLOBAL     = 0x0008,
+        NAME_REF        = 0x0010,
+        FORCE           = 0x0020,
+        CHECK_LOCAL     = 0x0040,
+        NO_EXPAND       = 0x0080,
+        NO_EVAL         = 0x0100,
+        NO_LONGJMP      = 0x0200,
+        NO_INVIS        = 0x0400,
+        ALLOW_ALL_SUB   = 0x0800,
+        ONE_WORD        = 0x1000,
+        NO_TEMP_ENV     = 0x2000,
+        XTRACE          = 0x4000,
+    }
+}
+
 // search for: `#define VC_HASLOCAL`
 cenum! {
     pub enum VCFlags {
@@ -79,16 +99,19 @@ pub struct FFIVarContext<'a> {
     pub name: Option<BashStrRef<'static>>,
     pub scope: c_int,
     pub flags: VCFlags,
-    pub up: Option<NonNull<FFIVarContext<'a>>>,
-    pub down: Option<NonNull<FFIVarContext<'a>>>,
-    // TODO: Implement HASH_TABLE
-    pub table: *const (),
+    pub up: Option<VarContextRef<'a>>,
+    pub down: Option<VarContextRef<'a>>,
+    pub table: Option<TableRef<'a>>,
     _phantom: PhantomData<&'a ()>,
 }
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct ShellVar<'a>(NonNull<FFIShellVar<'a>>);
+pub struct ShellVarRef<'a>(NonNull<FFIShellVar<'a>>);
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct VarContextRef<'a>(NonNull<FFIVarContext<'a>>);
 
 #[derive(Clone, Copy)]
 pub enum ShellVarValue<'a> {
@@ -97,7 +120,7 @@ pub enum ShellVarValue<'a> {
     Array(ArrayRef<'a>),
 }
 
-impl<'a> ShellVar<'a> {
+impl<'a> ShellVarRef<'a> {
     pub const NULL: Option<Self> = None;
     #[must_use]
     #[inline(always)]
@@ -151,7 +174,7 @@ impl<'a> ShellVar<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub fn copy<'b>(self) -> ShellVar<'b> {
+    pub fn copy<'b>(self) -> ShellVarRef<'b> {
         unsafe {
             external::ffi::copy_variable(self)
         }
@@ -179,8 +202,8 @@ impl<'a> ShellVar<'a> {
 
     #[must_use]
     #[inline(always)]
-    pub fn forget_lifetime(self) -> ShellVar<'static> {
-        ShellVar(ManuallyDrop::new(self).0.cast())
+    pub fn forget_lifetime(self) -> ShellVarRef<'static> {
+        ShellVarRef(ManuallyDrop::new(self).0.cast())
     }
 
     #[inline(always)]
