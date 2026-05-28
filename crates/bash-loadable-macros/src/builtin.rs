@@ -33,14 +33,12 @@ pub enum LongDoc {
 }
 
 struct Regexes {
-    bash_ident: Regex,
     bash_ident_invalid: Regex,
 }
 
 static REGEX: LazyLock<Regexes> = LazyLock::new(|| {
     Regexes {
-        bash_ident: Regex::new("^[a-zA-Z0-9-_.:]+$").expect("Failed to create bash_ident regex."),
-        bash_ident_invalid: Regex::new("[^a-zA-Z0-9-_.:]").expect("Failed to create bash_ident_invalid regex."),
+        bash_ident_invalid: Regex::new("[^a-zA-Z0-9-_.]").expect("Failed to create bash_ident_invalid regex."),
     }
 });
 
