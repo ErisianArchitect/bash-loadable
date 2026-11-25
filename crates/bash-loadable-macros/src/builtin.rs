@@ -280,7 +280,7 @@ impl ToTokens for BuiltinData {
             quote!()
         };
         
-        let bash_loadable = crate::util::get_bash_loadable_name();
+        let bash_loadable = crate::util::get_bash_loadable_path();
         // #[allow(non_upper_case_globals)]
         let ffi_block: syn::Item = syn::parse_quote!(const _: () = {
             use super::*;
@@ -301,7 +301,7 @@ impl ToTokens for BuiltinData {
             };
             #[unsafe(export_name = #builtin_name)]
             pub extern "C" fn builtin_command(word_list: WordList) -> BashStatus {
-                let words = word_list.into_string_vec();
+                let words = word_list.into_str_vec();
                 self::command(words.into()).eprintln_then_into_status()
             }
 
@@ -315,15 +315,17 @@ impl ToTokens for BuiltinData {
                 function: builtin_command,
                 short_doc: (#usage_cstr).as_ptr(),
                 long_doc: {
-                    const LONG_DOC: LongDoc<#para_count> = LongDoc::new([
+                    struct LongDocUnsafeSync(LongDoc<#para_count>);
+                    unsafe impl Sync for LongDocUnsafeSync {}
+                    static LONG_DOC: LongDocUnsafeSync = LongDocUnsafeSync(LongDoc::new([
                         #(
                             ::core::concat!(
                                 #long_docs,
                                 "\0"
                             ).as_ptr().cast::<::core::ffi::c_char>(),
                         )*
-                    ]);
-                    LONG_DOC.as_ptr()
+                    ]));
+                    LONG_DOC.0.as_ptr()
                 },
             }.build();
         };);

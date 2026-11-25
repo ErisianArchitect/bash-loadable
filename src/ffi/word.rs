@@ -367,11 +367,18 @@ impl WordList {
 
     #[must_use]
     #[inline(always)]
-    pub fn iter(&self) -> WordListIter<'_> {
+    pub fn iter<'a>(&'a self) -> WordListIter<'a> {
         WordListIter {
             list: *self,
             _phantom: PhantomData,
         }
+    }
+
+    #[must_use]
+    pub fn into_str_vec<'a>(&'a self) -> Vec<&'a str> {
+        self.iter()
+            .map(|(word, _)| word)
+            .collect()
     }
 
     #[must_use]

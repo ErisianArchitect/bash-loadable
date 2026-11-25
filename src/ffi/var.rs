@@ -7,8 +7,8 @@ use std::{marker::PhantomData, mem::{ManuallyDrop, transmute}, ptr::NonNull};
 
 use crate::{cenum, ffi::{array::ArrayRef, bash_str::BashStrRef, external, hash_table::TableRef}, util::ffi::{from_cstr, to_cstr}};
 
-pub type ShellVarValueFn = extern "C" fn(*const FFIShellVar);
-pub type ShellVarAssignFn = extern "C" fn(*mut FFIShellVar, value: *const c_char, index: c_long, key: *const c_char) -> *const FFIShellVar;
+pub type ShellVarValueFn = extern "C" fn(*const FFIShellVar) -> *const FFIShellVar;
+pub type ShellVarAssignFn = extern "C" fn(*mut FFIShellVar, value: *const c_char, index: c_long, key: *const c_char) -> *mut FFIShellVar;
 
 cenum! {
     pub enum VarAttrs {
