@@ -1,11 +1,23 @@
-use std::{ffi::{CStr, c_char, c_int}, marker::PhantomData, mem::{ManuallyDrop, transmute}, ptr::NonNull};
+use std::{
+    ffi::{
+        CStr,
+        c_char
+    },
+    marker::PhantomData,
+    mem::{
+        transmute,
+    },
+    ptr::NonNull
+};
 use crate::{
     macros::{
         cenum,
     },
-    ffi::external::{self, ffi::{
-        dispose_word, dispose_words, make_bare_word, make_word, make_word_flags, make_word_list
-    }}, util::{self, ffi::to_cstr}
+    external,
+    util::{
+        self,
+        ffi::to_cstr,
+    }
 };
 
 cenum!(
@@ -186,12 +198,12 @@ impl std::fmt::Display for Word {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FFIWordList {
-    pub next: WordList,
+    pub next: WordList<'static>,
     pub word: Word,
 }
 
 impl FFIWordList {
-    pub const NULL: FFIWordList = FFIWordList { next: WordList(None), word: Word::new(None) };
+    pub const NULL: FFIWordList = FFIWordList { next: WordList(None, PhantomData), word: Word::new(None) };
 
     #[must_use]
     #[inline]
@@ -232,10 +244,10 @@ pub enum WordKind<'a> {
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct WordList(Option<NonNull<FFIWordList>>);
+pub struct WordList<'a>(Option<NonNull<FFIWordList>>, PhantomData<&'a str>);
 
-impl WordList {
-    pub const EMPTY: Self = Self(None);
+impl<'a> WordList<'a> {
+    pub const EMPTY: Self = Self(None, PhantomData);
     #[must_use]
     #[inline(always)]
     pub const fn get(&self) -> Option<&FFIWordList> {
@@ -250,7 +262,7 @@ impl WordList {
 
     #[must_use]
     pub fn new(words: &[WordKind]) -> Self {
-        let mut tail = WordList(None);
+        let mut tail = WordList(None, PhantomData);
         for &word in words.into_iter().rev() {
             match word {
                 WordKind::Bare(word) => tail.prepend_bare_word(word),
@@ -262,7 +274,7 @@ impl WordList {
 
     #[must_use]
     pub fn new_bash(words: &[&str]) -> Self {
-        let mut tail = WordList(None);
+        let mut tail = WordList(None, PhantomData);
         for &word in words.into_iter().rev() {
             tail.prepend_word(word);
         }
@@ -271,7 +283,7 @@ impl WordList {
 
     #[must_use]
     pub fn new_bare(bare_words: &[&str]) -> Self {
-        let mut tail = WordList(None);
+        let mut tail = WordList(None, PhantomData);
         for &word in bare_words.into_iter().rev() {
             tail.prepend_bare_word(word);
         }
@@ -356,7 +368,7 @@ impl WordList {
 
     #[must_use]
     #[inline(always)]
-    pub fn copy(self) -> WordList {
+    pub fn copy(self) -> WordList<'a> {
         unsafe { external::ffi::copy_word_list(self) }
     }
 
@@ -367,22 +379,21 @@ impl WordList {
 
     #[must_use]
     #[inline(always)]
-    pub fn iter<'a>(&'a self) -> WordListIter<'a> {
+    pub fn iter(self) -> WordListIter<'a> {
         WordListIter {
-            list: *self,
-            _phantom: PhantomData,
+            list: self,
         }
     }
 
     #[must_use]
-    pub fn into_str_vec<'a>(&'a self) -> Vec<&'a str> {
+    pub fn into_str_vec(self) -> Vec<&'a str> {
         self.iter()
             .map(|(word, _)| word)
             .collect()
     }
 
     #[must_use]
-    pub fn into_string_vec(&self) -> Vec<String> {
+    pub fn into_string_vec(self) -> Vec<String> {
         self.iter()
             .map(|(word, _)| String::from(word))
             .collect()
@@ -390,8 +401,7 @@ impl WordList {
 }
 
 pub struct WordListIter<'a> {
-    list: WordList,
-    _phantom: PhantomData<&'a str>,
+    list: WordList<'a>,
 }
 
 impl<'a> Iterator for WordListIter<'a> {
@@ -399,7 +409,31 @@ impl<'a> Iterator for WordListIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = unsafe { self.list.0?.as_ref() };
-        self.list = WordList(current.next_raw());
+        self.list = WordList(current.next_raw(), PhantomData);
         current.word.to_pair()
+    }
+}
+
+impl<'a> From<WordList<'a>> for Vec<&'a str> {
+    fn from(value: WordList<'a>) -> Self {
+        value.into_str_vec()
+    }
+}
+
+impl<'a> From<WordList<'a>> for Vec<(&'a str, WordFlags)> {
+    fn from(value: WordList<'a>) -> Self {
+        value.iter().collect()
+    }
+}
+
+impl<'a> From<WordList<'a>> for Vec<String> {
+    fn from(value: WordList<'a>) -> Self {
+        value.iter().map(|(w, _f)| w.to_owned()).collect()
+    }
+}
+
+impl<'a> From<WordList<'a>> for Vec<(String, WordFlags)> {
+    fn from(value: WordList<'a>) -> Self {
+        value.iter().map(|(w, f)| (w.to_owned(), f)).collect()
     }
 }

@@ -1,5 +1,4 @@
 use core::ffi::{
-    CStr,
     c_char,
 };
 

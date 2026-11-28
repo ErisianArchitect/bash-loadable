@@ -8,7 +8,11 @@ use std::num::NonZeroI16;
 #[cfg(not(any(target_arch = "avr", target_arch = "msp430")))]
 use std::num::NonZeroI32;
 use std::{
-    borrow::Cow, ffi::CString, marker::PhantomData, mem::transmute, num::NonZeroI16, ptr::NonNull, str::FromStr
+    borrow::Cow,
+    ffi::CString,
+    marker::PhantomData,
+    mem::transmute,
+    ptr::NonNull,
 };
 
 // RE-EXPORTS

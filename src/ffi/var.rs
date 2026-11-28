@@ -2,13 +2,32 @@ use core::ffi::{
     c_char,
     c_long,
     c_int,
+    CStr,
 };
-use std::{marker::PhantomData, mem::{ManuallyDrop, transmute}, ptr::NonNull};
+use std::{
+    marker::PhantomData,
+    mem::{
+        ManuallyDrop,
+    },
+    ptr::NonNull,
+};
 
-use crate::{cenum, ffi::{array::ArrayRef, bash_str::BashStrRef, external, hash_table::TableRef}, util::ffi::{from_cstr, to_cstr}};
+use crate::{
+    cenum,
+    external,
+    ffi::{
+        array::ArrayRef,
+        bash_str::BashStrRef,
+        hash_table::TableRef
+    },
+    util::ffi::{
+        from_cstr,
+        to_cstr,
+    },
+};
 
-pub type ShellVarValueFn = extern "C" fn(*const FFIShellVar) -> *const FFIShellVar;
-pub type ShellVarAssignFn = extern "C" fn(*mut FFIShellVar, value: *const c_char, index: c_long, key: *const c_char) -> *mut FFIShellVar;
+pub type ShellVarValueFn<'a> = extern "C" fn(Option<ShellVarRef<'a>>) -> Option<ShellVarRef<'a>>;
+pub type ShellVarAssignFn<'a> = extern "C" fn(Option<ShellVarRef<'a>>, value: Option<BashStrRef<'a>>, index: c_long, key: Option<BashStrRef<'a>>) -> Option<ShellVarRef<'a>>;
 
 cenum! {
     pub enum VarAttrs {
@@ -84,11 +103,11 @@ cenum! {
 
 #[repr(C)]
 pub struct FFIShellVar<'a> {
-    pub name: *const c_char,
-    pub value: *const c_char,
-    pub export_str: *const c_char,
-    pub dynamic_value: ShellVarValueFn,
-    pub assign_func: ShellVarAssignFn,
+    pub name: Option<BashStrRef<'a>>,
+    pub value: Option<BashStrRef<'a>>,
+    pub export_str: Option<BashStrRef<'a>>,
+    pub dynamic_value: Option<ShellVarValueFn<'a>>,
+    pub assign_func: Option<ShellVarAssignFn<'a>>,
     pub attributes: VarAttrs,
     pub context: c_int,
     _phantom: PhantomData<&'a ()>,
@@ -96,7 +115,7 @@ pub struct FFIShellVar<'a> {
 
 #[repr(C)]
 pub struct FFIVarContext<'a> {
-    pub name: Option<BashStrRef<'static>>,
+    pub name: Option<BashStrRef<'a>>,
     pub scope: c_int,
     pub flags: VCFlags,
     pub up: Option<VarContextRef<'a>>,
@@ -126,6 +145,15 @@ impl<'a> ShellVarRef<'a> {
     #[inline(always)]
     pub const fn null() -> Option<Self> {
         Self::NULL
+    }
+
+    pub fn new_dynamic(name: &CStr, value: &CStr, getter: Option<ShellVarValueFn<'a>>, setter: Option<ShellVarAssignFn<'a>>) -> Option<ShellVarRef<'a>> {
+        if let Some(mut shell_var) = unsafe { external::ffi::bind_variable::<'a>(name.as_ptr(), value.as_ptr(), AssignFlags::NONE) } {
+            shell_var.get_mut().dynamic_value = getter;
+            shell_var.get_mut().assign_func = setter;
+            return Some(shell_var);
+        }
+        None
     }
 
     #[must_use]
@@ -185,7 +213,7 @@ impl<'a> ShellVarRef<'a> {
     pub fn value<'b>(&self) -> ShellVarValue<'b>
     where 'a: 'b {
         if self.get().attributes.get_array() {
-            let array_ptr = self.get().value;
+            let array_ptr: *const c_char = unsafe { ::core::mem::transmute(self.get().value) };
             let Some(ptr) = NonNull::new(array_ptr.cast_mut()) else {
                 return ShellVarValue::Null;
             };
@@ -213,3 +241,4 @@ impl<'a> ShellVarRef<'a> {
         }
     }
 }
+

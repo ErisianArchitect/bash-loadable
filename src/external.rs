@@ -8,10 +8,49 @@ pub mod ffi {
         c_long,
     };
     use std::{ffi::c_uint, ptr::NonNull};
-    use libc::intptr_t;
 
 use crate::{ffi::{
-        alias::Alias, array::{Array, ArrayElement, ArrayElementMapFn, ArrayRef, FFIArray, FFIArrayElement, PFlags, ShiftElementFlags}, bash_owned::BashOwned, bash_str::{BashStr, BashStrRef}, eval::EvalFlags, fn_ptr::{CopyFn, FreeFn}, hash_table::{BucketRef, HashDataFreeFn, TableFlags, TableRef}, pattern::MatchFlags, strvec::{StrVec, StrVecRef}, var::{AssignFlags, ShellVarRef, VCFlags, VarContextRef}, word::{
+        builtin::{
+            Builtin,
+        },
+        alias::Alias,
+        array::{
+            Array,
+            ArrayElement,
+            ArrayElementMapFn,
+            ArrayRef,
+            FFIArray,
+            FFIArrayElement,
+            PFlags,
+            ShiftElementFlags
+        },
+        bash_owned::BashOwned,
+        bash_str::{
+            BashStr,
+            BashStrRef
+        },
+        eval::EvalFlags,
+        fn_ptr::{
+            CopyFn,
+        },
+        hash_table::{
+            BucketRef,
+            HashDataFreeFn,
+            TableFlags,
+            TableRef
+        },
+        pattern::MatchFlags,
+        strvec::{
+            StrVec,
+            StrVecRef
+        },
+        var::{
+            AssignFlags,
+            ShellVarRef,
+            VCFlags,
+            VarContextRef,
+        },
+        word::{
             Word,
             WordList,
         }
@@ -20,6 +59,12 @@ use crate::{ffi::{
     // pub type ArrayElementMapFn<T> = extern "C" fn(ArrayElementRef<'_>, data: &mut T);
 
     unsafe extern "C" {
+
+        pub static static_shell_builtins: *const Builtin;
+        pub static mut shell_builtins: *mut Builtin;
+        pub static mut num_shell_builtins: c_int;
+        pub static current_builtin: *mut Builtin;
+    
         // xmalloc.h
         pub fn xmalloc(
             size: usize,
@@ -39,7 +84,7 @@ use crate::{ffi::{
 
         // common.h
         pub fn remember_args(
-            words: WordList,
+            words: WordList<'_>,
             destructive: CBool,
         );
 
@@ -47,9 +92,9 @@ use crate::{ffi::{
         pub fn copy_word(
             word: Word,
         ) -> Word;
-        pub fn copy_word_list(
-            words: WordList,
-        ) -> WordList;
+        pub fn copy_word_list<'a>(
+            words: WordList<'_>,
+        ) -> WordList<'a>;
 
         // make_cmd.h
         pub fn alloc_word_desc(
@@ -64,17 +109,17 @@ use crate::{ffi::{
             word: Word,
             string: *const c_char,
         ) -> Word;
-        pub fn make_word_list(
+        pub fn make_word_list<'a>(
             word: Word,
-            head: WordList,
-        ) -> WordList;
+            head: WordList<'a>,
+        ) -> WordList<'a>;
     
         // dispose_cmd.h
         pub fn dispose_word(
             word: Word,
         );
         pub fn dispose_words(
-            list: WordList,
+            list: WordList<'_>,
         );
     
         // Current working directory
@@ -401,21 +446,21 @@ use crate::{ffi::{
         // TODO: Does this need owned??
         pub fn array_to_word_list(
             array: ArrayRef<'_>,
-        ) -> WordList;
+        ) -> WordList<'_>;
         pub fn array_from_wordlist(
-            words: WordList,
+            words: WordList<'_>,
         ) -> Array;
         // TODO: Does this need owned??
         pub fn array_keys_to_word_list(
             array: ArrayRef<'_>,
-        ) -> WordList;
+        ) -> WordList<'_>;
         // TODO: Does this need owned??
         pub fn array_to_kvpair_list(
             array: ArrayRef<'_>,
-        ) -> WordList;
+        ) -> WordList<'_>;
         pub fn array_assign_list(
             array: ArrayRef<'_>,
-            words: WordList,
+            words: WordList<'_>,
         ) -> Array;
         // // TODO: Investigate memory management of return value.
         // TODO: Does this need owned??

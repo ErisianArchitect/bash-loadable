@@ -1,6 +1,6 @@
-use std::{mem::transmute, ptr::NonNull};
+use std::{ptr::NonNull};
 
-use crate::ffi::external;
+use crate::external;
 
 
 

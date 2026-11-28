@@ -1,6 +1,6 @@
-use std::{ffi::c_int, ptr::NonNull};
+use std::{ptr::NonNull};
 
-use crate::ffi::hash_table::{BucketRef, FFIBucket};
+use crate::ffi::hash_table::{BucketRef};
 
 pub trait CPtrEquivalent<T: Sized> {}
 

@@ -3,18 +3,14 @@ use std::{borrow::Cow, ffi::{CStr, CString}, sync::LazyLock};
 use fancy_regex::Regex;
 use proc_macro2::Span;
 use syn::{
-    Attribute,
     Error as SynError,
     Ident,
     Item,
-    ItemConst,
-    ItemFn,
     ItemMod,
     LitCStr,
     LitStr,
     Token,
     token::Bracket,
-    ext::IdentExt,
     parse::Parse,
     spanned::Spanned,
 };
@@ -104,6 +100,9 @@ pub struct BuiltinAttrInput {
     pub name: String,
     pub usage_doc: String,
     pub doc: LongDoc,
+    pub takes_assignment: bool,
+    pub takes_array_ref: bool,
+    pub creates_locals: bool,
 }
 
 pub struct BuiltinModInput {
@@ -120,29 +119,58 @@ impl Parse for BuiltinAttrInput {
         let mut name: Option<String> = None;
         let mut usage_doc: Option<String> = None;
         let mut doc: Option<LongDoc> = None;
+        let mut takes_assignment: bool = false;
+        let mut takes_array_ref: bool = false;
+        let mut creates_locals: bool = false;
         while !input.is_empty() {
             let key = input.parse::<Ident>()?;
-            _ = input.parse::<Token![=]>()?;
             let key_str = key.to_string();
             match key_str.as_str() {
                 "name" => {
+                    _ = input.parse::<Token![=]>()?;
                     if name.is_some() {
                         return Err(SynError::new(key.span(), "Duplicate `name` field."));
                     }
                     name = Some(input.parse::<BuiltinName>()?.name);
                 }
                 "usage" => {
+                    _ = input.parse::<Token![=]>()?;
                     if usage_doc.is_some() {
                         return Err(SynError::new(key.span(), "Duplicate `usage` field."));
                     }
                     usage_doc = Some(input.parse::<LitStr>()?.value());
                 }
                 "doc" => {
+                    _ = input.parse::<Token![=]>()?;
                     if doc.is_some() {
                         return Err(SynError::new(key.span(), "Duplicate `doc` field."));
                     }
                     doc = Some(input.parse::<LongDoc>()?);
                 }
+                "takes_assignment" => {
+                    if takes_assignment {
+                        return Err(SynError::new(key.span(), "Duplicate of `takes_assignment` flag."));
+                    }
+                    takes_assignment = true;
+                }
+                "creates_locals" => {
+                    if creates_locals  {
+                        return Err(SynError::new(key.span(), "Duplicate of `creates_locals` flag."));
+                    }
+                    creates_locals = true;
+                }
+                "takes_array_ref" => {
+                    if takes_array_ref {
+                        return Err(SynError::new(key.span(), "Duplicate of `takes_array_ref` flag."));
+                    }
+                    takes_array_ref = true;
+                }
+                /*
+                name = "",
+                usage = "",
+                doc = [],
+                takes_assignment = true,
+                */
                 _ => return Err(SynError::new(key.span(), "Unexpected argument.")),
             }
             if !input.is_empty() {
@@ -165,6 +193,9 @@ impl Parse for BuiltinAttrInput {
                     name,
                     usage_doc,
                     doc: doc.unwrap_or_else(|| LongDoc::Paragraph(String::from(""))),
+                    takes_assignment,
+                    takes_array_ref,
+                    creates_locals,
                 })
             }
         }
@@ -249,18 +280,26 @@ impl ToTokens for BuiltinData {
         let struct_name = format!("{name}_struct");
         let builtin_name = format!("{name}_builtin");
 
+        let internal_handle_unwind_name: Ident = syn::parse_quote!(__internal_handle_unwind);
+
         let on_load_tokens = if self.module.has_on_load {
             let load_name = format!("{builtin_name}_load");
             quote! {
                 #[unsafe(export_name = #load_name)]
                 pub extern "C" fn buildin_load(s: *const ::core::ffi::c_char) -> c_int {
                     // returns 1 for success, 0 for failure.
-                    match self::on_load() {
-                        Ok(()) => 1,
-                        Err(err) => {
-                            err.eprintln();
-                            0
-                        },
+                    let result = #internal_handle_unwind_name(move || {
+                        match self::on_load() {
+                            Ok(()) => 1,
+                            Err(err) => {
+                                err.eprintln();
+                                0
+                            },
+                        }
+                    });
+                    match result {
+                        Ok(ret) => ret,
+                        Err(()) => 0,
                     }
                 }
             }
@@ -273,63 +312,100 @@ impl ToTokens for BuiltinData {
             quote! {
                 #[unsafe(export_name = #unload_name)]
                 pub extern "C" fn builtin_unload() {
-                    self::on_unload();
+                    _=#internal_handle_unwind_name(move || {
+                        self::on_unload();
+                    });
                 }
             }
         } else {
             quote!()
         };
+
+        let mut builtin_flags: Vec<syn::Expr> = vec![];
+        if self.attr.takes_assignment {
+            builtin_flags.push(syn::parse_quote!(BuiltinFlags::ASSIGNMENT));
+        }
+        if self.attr.takes_array_ref {
+            builtin_flags.push(syn::parse_quote!(BuiltinFlags::ARRAYREF));
+        }
+        if self.attr.creates_locals {
+            builtin_flags.push(syn::parse_quote!(BuiltinFlags::LOCALVAR));
+        }
         
         let bash_loadable = crate::util::get_bash_loadable_path();
-        // #[allow(non_upper_case_globals)]
-        let ffi_block: syn::Item = syn::parse_quote!(const _: () = {
-            use super::*;
-            use ::std::ffi::c_int;
-            use #bash_loadable::{
-                ffi::{
-                    builtin::{
-                        Builtin,
-                        BuiltinInfo,
-                        BuiltinFlags,
-                    },
-                    word::WordList,
-                },
-                util::{
-                    docs::{LongDoc},
-                    ffi::{BashStatus, BashStatusResult, BashStatusError},
-                },
-            };
-            #[unsafe(export_name = #builtin_name)]
-            pub extern "C" fn builtin_command(word_list: WordList) -> BashStatus {
-                let words = word_list.into_str_vec();
-                self::command(words.into()).eprintln_then_into_status()
-            }
-
-            #on_load_tokens
-
-            #on_unload_tokens
-
+        let ffi_block: syn::Item = syn::parse_quote!{
             #[unsafe(export_name = #struct_name)]
-            pub static BUILTIN_STRUCT: Builtin = BuiltinInfo {
-                name: (#name_cstr).as_ptr(),
-                function: builtin_command,
-                short_doc: (#usage_cstr).as_ptr(),
-                long_doc: {
-                    struct LongDocUnsafeSync(LongDoc<#para_count>);
-                    unsafe impl Sync for LongDocUnsafeSync {}
-                    static LONG_DOC: LongDocUnsafeSync = LongDocUnsafeSync(LongDoc::new([
+            pub static BUILTIN: #bash_loadable::ffi::builtin::Builtin = {
+                use super::*;
+                use ::std::ffi::c_int;
+                use #bash_loadable::{
+                    ffi::{
+                        builtin::{
+                            BuiltinInfo,
+                            BuiltinFlags,
+                        },
+                        word::WordList,
+                    },
+                    util::{
+                        docs::{LongDoc},
+                        ffi::{BashStatus, BashStatusResult, BashStatusError},
+                    },
+                };
+
+                #[inline(always)]
+                fn #internal_handle_unwind_name<F: FnOnce() -> R + ::std::panic::UnwindSafe, R>(f: F) -> Result<R, ()> {
+                    match ::std::panic::catch_unwind(f) {
+                        Ok(result) => Ok(result),
+                        Err(payload) => {
+                            eprintln!("{payload:?}");
+                            Err(())
+                        }
+                    }
+                }
+            
+                #[unsafe(export_name = #builtin_name)]
+                pub extern "C" fn builtin_command(word_list: WordList<'_>) -> BashStatus {
+                    let result = #internal_handle_unwind_name(move || {
+                        self::command(word_list.into())
+                            .eprintln_then_into_status()
+                    });
+                    match result {
+                        Ok(status) => status,
+                        Err(()) => BashStatus::FAILURE,
+                    }
+                }
+
+                #on_load_tokens
+
+                #on_unload_tokens
+
+                BuiltinInfo {
+                    name: (#name_cstr).as_ptr(),
+                    function: builtin_command,
+                    short_doc: (#usage_cstr).as_ptr(),
+                    long_doc: {
+                        struct LongDocUnsafeSync(LongDoc<#para_count>);
+                        unsafe impl Sync for LongDocUnsafeSync {}
+                        static LONG_DOC: LongDocUnsafeSync = LongDocUnsafeSync(LongDoc::new([
+                            #(
+                                ::core::concat!(
+                                    #long_docs,
+                                    "\0"
+                                ).as_ptr().cast::<::core::ffi::c_char>(),
+                            )*
+                        ]));
+                        LONG_DOC.0.as_ptr()
+                    },
+                }.build_with_flags({
+                    BuiltinFlags::join(&[
                         #(
-                            ::core::concat!(
-                                #long_docs,
-                                "\0"
-                            ).as_ptr().cast::<::core::ffi::c_char>(),
+                            #builtin_flags,
                         )*
-                    ]));
-                    LONG_DOC.0.as_ptr()
-                },
-            }.build();
-        };);
+                    ])
+                })
+            };
+        };
         items.push(ffi_block);
-        tokens.extend(quote!(const _: () = { #module };));
+        tokens.extend(quote!(#module));
     }
 }

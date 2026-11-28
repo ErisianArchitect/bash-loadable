@@ -7,9 +7,9 @@ use core::{
     marker::PhantomData,
     ptr::NonNull,
 };
-use std::{mem::transmute, ops::{ControlFlow, Deref}};
+use std::{mem::transmute, ops::{ControlFlow}};
 use crate::{
-    ffi::external,
+    external,
     macros::cenum,
     util::{check::assert_pointer_niche, ffi::to_cstr},
 };
@@ -290,14 +290,14 @@ impl<'a> ArrayRef<'a> {
 }
 
 impl Array {
-    #[must_use]
-    pub fn new(element_count: c_long) -> Self {
-        unsafe {
-            let array = external::ffi::array_create();
-            // external::ffi::array_resize(array.arr.ptr, element_count);
-            array
-        }
-    }
+    // #[must_use]
+    // pub fn new(element_count: c_long) -> Self {
+    //     unsafe {
+    //         let array = external::ffi::array_create();
+    //         // external::ffi::array_resize(array.arr.ptr, element_count);
+    //         array
+    //     }
+    // }
 
     #[must_use]
     #[inline(always)]

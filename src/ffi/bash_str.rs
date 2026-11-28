@@ -12,7 +12,7 @@ use core::{
 use std::{marker::PhantomData, mem::ManuallyDrop};
 
 use crate::{
-    ffi::external,
+    external,
     util::ffi::{
         from_cstr_nonnull, strlen_nonnull, to_cstr,
     },

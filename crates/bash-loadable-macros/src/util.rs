@@ -1,5 +1,4 @@
-use quote::{quote, format_ident};
-use proc_macro2::TokenStream;
+use quote::{format_ident};
 use proc_macro_crate::{FoundCrate, crate_name};
 
 pub fn get_bash_loadable_path() -> syn::Path {

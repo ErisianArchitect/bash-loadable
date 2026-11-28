@@ -38,6 +38,16 @@ macro_rules! cenum {
 
             impl $struct_name {
                 pub const NONE: Self = Self(0);
+                $(
+                    $(#[$doc_meta])?
+                    pub const $const_name: Self = $crate::cenum!(@expr_filter: $value);
+                )*
+                
+                #[must_use]
+                #[inline(always)]
+                pub const fn to_c_int(self) -> ::core::ffi::c_int {
+                    self.0
+                }
 
                 #[must_use]
                 #[inline(always)]
@@ -237,8 +247,6 @@ macro_rules! cenum {
                     )*
                 ];
                 $(
-                    $(#[$doc_meta])?
-                    pub const $const_name: Self = $crate::cenum!(@expr_filter: $value);
                     
                     #[must_use]
                     #[inline(always)]
@@ -246,16 +254,22 @@ macro_rules! cenum {
                         self.has_flags(Self::$const_name)
                     }
 
+                )*
+                $(
                     #[inline(always)]
                     pub const fn [<add_ $const_name:lower:snake>](&mut self) {
                         self.add_flags(Self::$const_name);
                     }
 
+                )*
+                $(
                     #[inline(always)]
                     pub const fn [<remove_ $const_name:lower:snake>](&mut self) {
                         self.remove_flags(Self::$const_name);
                     }
 
+                )*
+                $(
                     #[inline]
                     pub const fn [<set_ $const_name:lower:snake>](&mut self, on: bool) {
                         if on {
@@ -265,17 +279,23 @@ macro_rules! cenum {
                         }
                     }
 
+                )*
+                $(
                     #[inline(always)]
                     pub const fn [<toggle_ $const_name:lower:snake>](&mut self) {
                         self.0 ^= Self::$const_name.0;
                     }
 
+                )*
+                $(
                     #[must_use]
                     #[inline(always)]
                     pub const fn [<with_ $const_name:lower:snake>](self) -> Self {
                         self.with_flags(Self::$const_name)
                     }
 
+                )*
+                $(
                     #[must_use]
                     #[inline(always)]
                     pub const fn [<without_ $const_name:lower:snake>](self) -> Self {

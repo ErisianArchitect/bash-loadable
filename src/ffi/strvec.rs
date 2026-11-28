@@ -4,12 +4,11 @@ use core::{
     },
     ptr::{
         NonNull,
-        null, null_mut,
     },
 };
 use std::marker::PhantomData;
 
-use crate::{ffi::external, util::{check::assert_pointer_niche, ffi::CBool}};
+use crate::{external, util::{check::assert_pointer_niche, ffi::CBool}};
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
