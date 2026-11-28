@@ -230,7 +230,8 @@ fn sort_builtins() {
     builtins.sort_by(|lhs, rhs| lhs.name().cmp(rhs.name()));
 }
 
-pub fn add_builtins(builtins: &[&Builtin]) {
+/// Do not call this function during load/unload of builtin.
+pub unsafe fn add_builtins(builtins: &[&Builtin]) {
     use crate::external::ffi;
     if builtins.len() == 0
     || is_static_shell_builtins() {
